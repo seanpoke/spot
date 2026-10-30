@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    个人打卡定位项目 · 后端
+    =====================================================================
+    技术栈锁定见 AGENTS.md 第二节，不要擅自换版本或加依赖：
+      Spring Boot 3.2.x / JDK 21 / MyBatis-Plus 3.5.x / MySQL 8 / Redis (DB 3)
+    单模块，不要拆多模块。
+    =====================================================================
+  -->
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.2.12</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>ltd.sean</groupId>
+  <artifactId>visit</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <name>visit</name>
+  <description>个人打卡定位项目 · 后端</description>
+
+  <properties>
+    <java.version>21</java.version>
+    <!-- MyBatis-Plus 必须是 spring-boot3 版 starter，普通版在 Spring Boot 3 下会因
+         javax/jakarta 包名不兼容直接起不来 -->
+    <mybatis-plus.version>3.5.7</mybatis-plus.version>
+    <!-- 纯 Java，零原生依赖；不要换成 webp-imageio 那类需要本地库的方案 -->
+    <thumbnailator.version>0.4.20</thumbnailator.version>
+  </properties>
+
+  <dependencies>
+    <!-- Web MVC：Controller / 拦截器 / 静态资源映射 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- 参数校验（@Valid / @NotBlank），DTO 层用 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Redis：口令会话与限流，固定 DB 3 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
+    <!-- Lettuce 连接池需要它，不加则 spring.data.redis.lettuce.pool.* 配置不生效 -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-pool2</artifactId>
+    </dependency>
+
+    <!-- ORM：SQL 可见可读，所有者能看懂 -->
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+      <version>${mybatis-plus.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!--
+      纯 Java 图片缩放/裁切，零原生依赖（选它而不是 WebP 的全部理由见 PRD 6.1）。
+      只用它做 thumb(400) / avatar(96) 与「前端没压成功」时的兜底，正常路径不碰 large。
+    -->
+    <dependency>
+      <groupId>net.coobird</groupId>
+      <artifactId>thumbnailator</artifactId>
+      <version>${thumbnailator.version}</version>
+    </dependency>
+
+    <!-- 只为省 getter/setter；编译期生效，不进运行时依赖 -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <optional>true</optional>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>visit</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <!-- Lombok 只在编译期用，打不进 jar -->
+            <exclude>
+              <groupId>org.projectlombok</groupId>
+              <artifactId>lombok</artifactId>
+            </exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

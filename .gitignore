@@ -1,0 +1,71 @@
+# =============================================================================
+# 个人打卡定位项目 · Git 忽略规则
+# 原则：构建产物、运行时数据、密钥一律不进仓库
+# =============================================================================
+
+# ---------- Java / Maven ----------
+backend/target/
+*.class
+*.jar
+!**/.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+
+# ---------- Node / Vite ----------
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+# Vite 加载配置时生成的临时文件（构建完不会自己删）
+*.timestamp-*.mjs
+
+# ---------- 运行时数据（用户上传的图片，属于数据不属于代码）----------
+backend/uploads/
+uploads/
+
+# ---------- 密钥与本地配置 ----------
+# .env.example 要提交，其余 .env 一律不提交
+.env
+.env.*
+!.env.example
+**/application-local.yml
+**/application-prod.yml
+**/application-secret.yml
+*.local
+# 本地 HTTPS 开发证书（仅 dev/preview 用，绝不进仓库）
+frontend/certs/
+# 本地 curl 调试产物：cookie 罐里有真实会话 token，登录体里有口令
+frontend/.ck.txt
+frontend/.login.json
+
+# ---------- 设计稿（原型 HTML / 截图 / 备份包，本地归档，不进仓库）----------
+designs/
+
+# ---------- 给 AI 的项目说明书（写给自己和 AI，只留本地）----------
+AGENTS.md
+
+# ---------- IDE 与系统文件 ----------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 日志与临时文件 ----------
+*.log
+logs/
+*.tmp
+*.bak
+*.swp
+
+# ---------- 浏览器自动化产物（playwright-cli 的快照与截图）----------
+.playwright-cli/
+
+# ---------- 服务器 nginx 配置（本机维护的真源，不进仓库）----------
+.nginx/

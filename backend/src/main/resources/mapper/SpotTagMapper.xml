@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  打卡点标签的批量读取。
+
+  为什么是一个 IN 查询而不是逐点查：列表页一次要出几十个点，
+  每个点单独查标签就是 N+1，在 3 Mbps 的带宽与小主机上会明显卡（AGENTS.md 第 12 条）。
+
+  排序规则来自 PRD 5.6：spot_tag.sort_order（这一格的次序）→ tag.sort_order（全库默认）
+  → tag.name（兜底稳定），三者都写全，避免同名标签顺序在不同查询里漂移。
+-->
+<mapper namespace="ltd.sean.visit.mapper.SpotTagMapper">
+
+  <select id="selectTagRowsBySpotIds" resultType="ltd.sean.visit.dto.SpotTagRow">
+    SELECT
+      st.spot_id AS spotId,   <!-- 归组用的打卡点 id -->
+      t.id       AS tagId,    <!-- 标签 id -->
+      t.name     AS tagName,  <!-- 标签名，前端直接展示 -->
+      t.color    AS tagColor  <!-- 标签颜色 #RRGGBB -->
+    FROM spot_tag st
+    JOIN tag t ON t.id = st.tag_id
+    WHERE st.spot_id IN
+    <foreach collection="spotIds" item="spotId" open="(" separator="," close=")">
+      #{spotId}
+    </foreach>
+    ORDER BY st.spot_id, st.sort_order, t.sort_order, t.name
+  </select>
+
+</mapper>

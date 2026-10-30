@@ -1,0 +1,85 @@
+/**
+ * 表单校验反馈 —— 水平轻晃 + 红框 + 提示从下方滑入。
+ *
+ * 全站复用，不绑定具体页面：
+ *   外层容器加 `ff-field`，出错时叠加 `ff-field--error`，
+ *   需要抖动时叠加 `ff-field--shake`（抖动结束由 JS 移除，见 composables/useFieldFeedback）。
+ *   提示文字用 `.ff-error` 包在 `<Transition name="ff-slide">` 里。
+ */
+
+/* 外层：把「输入框」和「下方提示」竖排，提示不参与红框 */
+.ff-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.ff-field {
+  position: relative;
+  border-radius: var(--r);
+  transition: box-shadow 0.16s ease, background 0.16s ease;
+}
+
+/* 出错：红色描边 + 极浅红底，比只改字色更醒目。
+   双类名是为了压过页面 scoped 样式里的 .row__label */
+.ff-field.ff-field--error {
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+  background: var(--danger-bg);
+}
+
+.ff-field.ff-field--error .row__label,
+.ff-field.ff-field--error .field__label {
+  color: var(--danger);
+}
+
+/* 水平轻晃：幅度小、衰减快，不让人觉得整页在抖 */
+.ff-field--shake {
+  animation: ff-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes ff-shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+/* 提示文字：红色小字，贴着字段下方 */
+.ff-error {
+  margin: 0;
+  padding: 6px 2px 0;
+  color: var(--danger);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* 从下方滑入 / 修正后收起 */
+.ff-slide-enter-active,
+.ff-slide-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease, max-height 0.2s ease, padding-top 0.2s ease;
+  overflow: hidden;
+}
+
+.ff-slide-enter-to,
+.ff-slide-leave-from {
+  max-height: 3.2em;
+}
+
+.ff-slide-enter-from,
+.ff-slide-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+  max-height: 0;
+  padding-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-field--shake {
+    animation: none;
+  }
+
+  .ff-slide-enter-active,
+  .ff-slide-leave-active {
+    transition-duration: 0.01ms;
+  }
+}

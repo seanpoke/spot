@@ -1,0 +1,47 @@
+# =============================================================================
+# 个人打卡定位项目 · Docker 构建上下文排除规则
+# -----------------------------------------------------------------------------
+# 构建上下文是【仓库根目录】，镜像里要重新编译 backend，所以 backend/pom.xml
+# 与 backend/src 必须放行——把这两样排除掉，构建会在 COPY 那一步就失败。
+# 反过来，designs（15 MB）和 frontend/node_modules（数百 MB）绝不能进上下文，
+# 否则每次构建都要先上传几百 MB 给 daemon。
+# =============================================================================
+
+# 版本控制与编辑器
+.git
+.github
+.idea
+.vscode
+*.iml
+
+# 与本镜像无关的目录
+designs
+frontend
+db
+deploy/nginx
+
+# deploy 下只有 Dockerfile 需要参与构建，其余是给服务器用的
+deploy/docker-compose.yml
+deploy/docker-compose.dev.yml
+deploy/.env.example
+
+# 文档
+AGENTS.md
+PRD-*.md
+*.md
+
+# 密钥（.env.example 是模板，在 deploy/ 下已被上面单独处理）
+.env
+.env.*
+
+# 运行时上传的图片
+backend/uploads
+
+# 本地构建产物不进上下文：镜像里会从源码重新编译，
+# 带进去只会让上下文变大，还可能把旧的 jar 混进来
+backend/target
+
+# 用镜像自带的 mvn，不需要 wrapper
+backend/mvnw
+backend/mvnw.cmd
+backend/.mvn

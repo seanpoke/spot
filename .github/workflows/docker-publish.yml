@@ -1,0 +1,93 @@
+# =============================================================================
+# 后端镜像构建与推送
+# -----------------------------------------------------------------------------
+# push 到 main 且改动 backend/** 时，在 GitHub 的 runner 上编译并推到 GHCR。
+# 服务器只做 docker compose pull，不装 JDK、不装 Maven、不跑编译。
+#
+# 为什么 paths 只写 backend/**：
+#   本文件、deploy/Dockerfile、.dockerignore 的改动不触发构建，避免"改个注释
+#   就重发一个镜像"。真要因为这些文件重建，去 Actions 页面点 Run workflow。
+#
+# 一次构建约 3 分钟（首次），之后靠 type=gha 的构建缓存约 1 分钟。
+#
+# 关于拉取权限：仓库 public 且 GHCR 包设为 public 时服务器可匿名 pull；
+#   包默认是 private，首次推送后要去 GitHub → 个人头像 → Packages → 该包 →
+#   Package settings → Change visibility → Public。若不想公开，见 AGENTS.md
+#   第六节的 docker login ghcr.io 两步。
+# =============================================================================
+
+name: Docker Publish
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'backend/**'
+  # 手工重建入口：改了 Dockerfile / 依赖版本 / 需要重发同一个 commit 时用
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # github.repository 会自动展开成 "seanpoke/spot"，
+  # 最终镜像名 ghcr.io/seanpoke/spot，与 deploy/docker-compose.yml 里的 image 一致
+  IMAGE_NAME: ${{ github.repository }}
+
+# 连推两次时取消前一次，避免旧 commit 的镜像后构建完把 latest 覆盖回去
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # backend/ 还没生成时给个可读的报错，而不是让 docker 抛出
+      # "COPY failed: no such file or directory"，那种报错看不出是脚手架没建
+      - name: Check backend exists
+        run: |
+          if [ ! -f backend/pom.xml ]; then
+            echo "::error::backend/pom.xml 不存在。后端脚手架尚未生成，当前仓库没有可编译的代码。"
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          # 上下文是仓库根目录，Dockerfile 里 COPY 的是 backend/pom.xml
+          context: .
+          file: ./deploy/Dockerfile
+          # 服务器是 x86，明确单平台，别让 buildx 走 QEMU 多平台白白多花几分钟
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # 把构建层缓存存在 GitHub Actions 里，Maven 依赖层跨构建复用
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

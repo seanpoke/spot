@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  到访统计的批量聚合。
+
+  - 列表页用 avgRating 在地图标记上显示「4.8 · 240m」
+  - 详情页用 visitCount + avgRating + lastVisitAt 算建议段位（PRD 5.1）
+
+  注意 MySQL 8 默认 ONLY_FULL_GROUP_BY：GROUP BY 之外的列必须聚合，这里只用聚合列。
+  NULL 语义：没有到访的点不会出现在结果里（Service 侧按 null 处理，不要当 0 分）。
+-->
+<mapper namespace="ltd.sean.visit.mapper.VisitMapper">
+
+  <select id="selectStatsBySpotIds" resultType="ltd.sean.visit.dto.SpotVisitStats">
+    SELECT
+      v.spot_id        AS spotId,      <!-- 归组用的打卡点 id -->
+      COUNT(*)         AS visitCount,  <!-- 到访次数 -->
+      AVG(v.rating)    AS avgRating,   <!-- 平均星级 -->
+      MAX(v.visited_at) AS lastVisitAt <!-- 最近一次到访日期 -->
+    FROM visit v
+    WHERE v.spot_id IN
+    <foreach collection="spotIds" item="spotId" open="(" separator="," close=")">
+      #{spotId}
+    </foreach>
+    GROUP BY v.spot_id
+  </select>
+
+</mapper>

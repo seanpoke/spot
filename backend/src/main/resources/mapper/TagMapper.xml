@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  标签库列表：带使用次数。
+
+  LEFT JOIN 而不是 JOIN：没人用的标签也要出现（useCount=0），否则「清理闲置标签」
+  这个操作永远看不到目标。
+  排序：tag.sort_order（全库默认次序）→ tag.name（兜底稳定，避免同序时顺序漂移）。
+-->
+<mapper namespace="ltd.sean.visit.mapper.TagMapper">
+
+  <select id="selectTagUsage" resultType="ltd.sean.visit.dto.TagUsageRow">
+    SELECT
+      t.id         AS id,        <!-- 标签 id -->
+      t.name       AS name,      <!-- 标签名 -->
+      t.color      AS color,     <!-- 标签颜色 #RRGGBB -->
+      t.sort_order AS sortOrder, <!-- 全库默认次序 -->
+      COUNT(st.tag_id) AS useCount <!-- 被多少个打卡点使用 -->
+    FROM tag t
+    LEFT JOIN spot_tag st ON st.tag_id = t.id
+    GROUP BY t.id, t.name, t.sort_order
+    ORDER BY t.sort_order, t.name
+  </select>
+
+</mapper>

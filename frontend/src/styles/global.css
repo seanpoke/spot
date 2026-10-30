@@ -1,0 +1,114 @@
+/**
+ * 全局样式。
+ *
+ * 三条视觉骨架（PRD 5.7，违反任何一条整套就散）：
+ *   ① 冷灰底 + 白卡（12px 圆角 + 双层低对比阴影）
+ *   ② 任何内容都不裸放在灰底上 —— 文字、数字、列表项都在卡里
+ *   ③ 橙色只给分数、当前选中、主 CTA
+ *
+ * 卡片类只提供「面」，不规定排版；卡片什么时候该用见 AGENTS.md 第 21 条：
+ * 一张卡 = 一件事，卡内要有量的差异，间距随重要性变化。
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  /* 只用无衬线；宋体/衬线做标题、等宽做标签都被否过 */
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---- 面 ---- */
+.card {
+  background: var(--card);
+  border-radius: var(--r);
+  box-shadow: var(--sh);
+}
+
+.page {
+  min-height: 100%;
+  padding: 16px 16px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ---- 排版 ---- */
+/* 层级靠字重与负字距拉开，不靠加深颜色；字号不做 13/14/15 三级小跳 */
+.page-title {
+  margin: 2px 0 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.meta {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink3);
+}
+
+.num {
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 通用控件 ---- */
+.btn {
+  height: 48px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--r);
+  background: var(--ink);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn--hot {
+  background: var(--hot);
+}
+
+/* 次要按钮：白底墨字，靠描边而不是阴影分界。一页里最多一个主按钮 */
+.btn--ghost {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--line2) inset;
+}
+
+/* 单页最多一个橙按钮：橙色是「主 CTA」，到处用等于没有主次 */

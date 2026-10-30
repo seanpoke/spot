@@ -1,0 +1,65 @@
+/**
+ * Element Plus 换肤。
+ *
+ * 原型是手写 CSS，EP 只用来兜住交互复杂、自己写容易出错的部件（日期选择、下拉、
+ * 抽屉、消息提示）。**必须换肤**：一旦露出 EP 默认的蓝色主色 + 4px 圆角 + 默认阴影，
+ * 整页立刻回到「通用后台模板」的味道（AGENTS.md 第二节）。
+ *
+ * 视觉主体（卡片、标记、刻度条、标签、分段控件）一律手写，不要用 el-card / el-tag / el-row。
+ */
+:root {
+  /* 主色用墨黑，不是橙色：橙色只给分数、选中、主 CTA 三处，不能当全局主色 */
+  --el-color-primary: #111318;
+  --el-color-primary-light-3: #3a3d44;
+  --el-color-primary-light-5: #5a6069;
+  --el-color-primary-light-7: #9aa1ab;
+  --el-color-primary-light-8: #c7cbd1;
+  --el-color-primary-light-9: #edeff2;
+  --el-color-primary-dark-2: #000000;
+
+  --el-color-danger: #c2452b;
+  --el-color-warning: #a87a1e;
+  --el-color-success: #2e8a7a;
+
+  --el-text-color-primary: #111318;
+  --el-text-color-regular: #5a6069;
+  --el-text-color-placeholder: #9aa1ab;
+  --el-border-color: #e2e5e9;
+  --el-border-color-light: #edeff2;
+  --el-bg-color: #ffffff;
+  --el-fill-color-blank: #ffffff;
+
+  /* 圆角与阴影跟设计令牌保持一致，避免同页出现两套圆角 */
+  --el-border-radius-base: 12px;
+  --el-border-radius-small: 10px;
+  --el-box-shadow-light: 0 1px 2px rgba(17, 24, 39, 0.05), 0 8px 22px -16px rgba(17, 24, 39, 0.26);
+
+  --el-font-size-base: 13.5px;
+}
+
+/* 弹层挂在 body 下，主色变量要再落一层，否则抽屉/下拉仍是默认蓝 */
+.el-popper,
+.el-drawer,
+.el-dialog,
+.el-message {
+  --el-color-primary: #111318;
+  --el-border-radius-base: 12px;
+}
+
+/* 输入类控件不要用 EP 默认的灰底，视觉上等于没有边界（PRD 5.7 表单控件） */
+.el-input__wrapper,
+.el-textarea__inner {
+  background-color: #ffffff;
+  box-shadow: 0 0 0 1px var(--line2) inset;
+}
+
+/* 日期面板挂在 body 下（popper），组件的 scoped 样式够不着，改在这里。
+   语言（周二 / 十月）由 main.ts 的 zh-cn locale 决定，这里只管字重与行距 */
+.visit-date-popper .el-date-picker__header-label {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.visit-date-popper .el-date-table td {
+  padding: 2px 0;
+}

@@ -1,0 +1,116 @@
+# =============================================================================
+# 个人打卡定位项目 · 后端主配置
+# -----------------------------------------------------------------------------
+# 三条原则：
+#   1) 所有环境相关的值都从环境变量读，源码与配置里不出现 IP、域名、口令
+#   2) 每个变量都有安全默认值，本地缺几个变量也能起（连不上库则健康检查报 503）
+#   3) 本地开发读仓库根目录的 .env；线上由 docker compose 的 env_file 注入，
+#      容器里没有 .env 文件（所以下面的 import 全是 optional）
+#
+# 变量清单见 AGENTS.md 第六节，模板见 deploy/.env.example
+# （本地跑后端时 .env 放仓库根目录，差异项见 AGENTS.md「本地开发」一节）
+# =============================================================================
+
+server:
+  port: ${SERVER_PORT:8811}
+  shutdown: graceful
+  # 让 request.getScheme()/getServerName() 认 X-Forwarded-* 头。
+  # BASE_URL 留空时靠它推导外部地址，不认这两个头就会拼出 http://spot-api:8080 这种内部地址
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: spot
+
+  # ---- 读取 .env（零依赖：Spring 原生支持把任意文本文件当 properties 读）----
+  # 相对路径按「启动时的工作目录」解析，所以把可能的位置都列上：
+  #   ../.env        <- 在 backend/ 下执行 mvn spring-boot:run（最常见）
+  #   ./.env         <- 在仓库根目录执行
+  #   ../deploy/.env <- 想临时复用线上模板时（一般用不到，留作兜底）
+  # optional: 文件不存在不报错，线上容器就是这种情况。
+  # 注意：系统环境变量优先级高于这里，容器里 env_file 注入的值会赢。
+  config:
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:./.env[.properties]
+      - optional:file:../deploy/.env[.properties]
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # allowPublicKeyRetrieval=true：MySQL 8 默认 caching_sha2_password，不用 SSL 时必需，
+    # 否则报 "Public Key Retrieval is not allowed"。
+    # 时区显式声明：库在云服务器上，不写会让 DATETIME 出现 8 小时偏移。
+    url: 'jdbc:mysql://${MYSQL_HOST:host.docker.internal}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:visit_db}?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Shanghai&forceConnectionTimeZoneToSession=true&rewriteBatchedStatements=true'
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
+    hikari:
+      pool-name: spot-hikari
+      # 4G 小机器与 MySQL 同机，连接池宁小勿大
+      maximum-pool-size: ${MYSQL_POOL_MAX:10}
+      minimum-idle: 2
+      connection-timeout: 10000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  data:
+    redis:
+      host: ${REDIS_HOST:host.docker.internal}
+      port: ${REDIS_PORT:6379}
+      # 固定 3，不要改：服务器 Redis 是五个项目共用的，库号是隔离手段之一
+      database: ${REDIS_DATABASE:3}
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 2000ms
+
+  servlet:
+    multipart:
+      # 前端已把图压到 250KB 左右上传，这里只是兜底，别为了"支持大图"调大
+      max-file-size: ${UPLOAD_MAX_MB:15}MB
+      max-request-size: ${UPLOAD_MAX_MB:15}MB
+
+  jackson:
+    # null 字段不进 JSON，列表接口的响应体小一点
+    default-property-inclusion: non_null
+    time-zone: Asia/Shanghai
+    serialization:
+      # 时间输出 ISO-8601（2026-10-27T14:30:00），格式交给前端，不在后端定死
+      write-dates-as-timestamps: false
+
+mybatis-plus:
+  # 复杂 SQL 放这里；简单查询用 Mapper 自带方法
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    # 交给 slf4j，SQL 级别由下面的 logging.level 控制，不直接往 stdout 打
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      # 主键由应用侧生成 UUID，与 schema 的 CHAR(36) 对应
+      id-type: assign_uuid
+
+app:
+  # 口令门。本地留空时应用能起来，但登录必然失败 —— 别在代码里写默认口令
+  access-password: ${ACCESS_PASSWORD:}
+  session-days: ${SESSION_DAYS:7}
+  # 外部访问地址，可空：空则按请求头推导
+  base-url: ${BASE_URL:}
+  # 图片 CDN 前缀。本地开发留空 -> 返回相对路径 -> 由 vite proxy 转发到后端
+  cdn-base-url: ${CDN_BASE_URL:}
+  upload-dir: ${UPLOAD_DIR:./uploads}
+  upload-max-mb: ${UPLOAD_MAX_MB:15}
+
+logging:
+  level:
+    root: info
+    ltd.sean.visit: debug
+    # Mapper 包开 debug 才会打印 SQL 与参数；嫌吵就调成 info
+    ltd.sean.visit.mapper: debug
+  pattern:
+    # 带 traceId 之前先保证时间可读，排查时区问题全靠它
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

@@ -1,0 +1,47 @@
+# 线上部署：只起 spot-api 一个容器。
+# MySQL / Redis / Nginx 是服务器上已有的，本文件不管，也别加进来抢端口。
+#
+# 部署目录：/home/ubuntu/app/visit/（本文件 + .env），前端产物在同级 dist/。
+# 镜像由 GitHub Actions 推到 GHCR，服务器只 pull：docker compose pull && up -d。
+# 要锁定某次构建就把 image 换成 ghcr.io/seanpoke/spot:sha-<短哈希>。
+
+services:
+  spot-api:
+    image: ghcr.io/seanpoke/spot:latest
+    container_name: spot-api
+    restart: unless-stopped
+
+    # 应用自身约 600MB，留余量但不允许它把同机的 MySQL 拖垮
+    mem_limit: 1g
+
+    ports:
+      # 必须绑 0.0.0.0：Nginx 从 host.docker.internal（docker0 网桥）进来，
+      # 写 127.0.0.1:8811 会 502。公网不放行 8811，靠安全组只开 80/443/22。
+      - "8811:8811"
+
+    env_file:
+      - .env
+
+    volumes:
+      # 图片目录：容器内 /app/uploads ↔ 宿主机 picture_bed/visit
+      # 公网地址 https://images.sean.ltd/visit/…，由 Nginx alias 直出（不经过 Java）
+      - /home/ubuntu/app/picture_bed/visit:/app/uploads
+
+    extra_hosts:
+      # 容器内用 host.docker.internal 连宿主机的 MySQL / Redis
+      - "host.docker.internal:host-gateway"
+
+    # 库连不上时 /api/health 返回 503，一个探针就能发现「没起来」和「连不上库」
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8811/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      # 不限制的话日志能把盘吃满
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

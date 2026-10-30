@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  统计看板（/stats）的聚合查询。
+
+  注意：
+  - MySQL 8 默认 ONLY_FULL_GROUP_BY，GROUP BY 之外的列必须聚合；
+    selectTopSpots 里 s.name / s.avatar 一并放进 GROUP BY，就是因为它们不是聚合列。
+  - 没有数据时返回 0 / 空集合，不是 null；Service 侧统一补齐 7 段与 12 个月。
+  - 城市用 COUNT(DISTINCT city) 且排除空串，避免「没填城市」被算成一个城市。
+-->
+<mapper namespace="ltd.sean.visit.mapper.StatsMapper">
+
+  <select id="selectTotals" resultType="ltd.sean.visit.dto.StatsTotals">
+    SELECT
+      (SELECT COUNT(*) FROM spot) AS spotCount,
+      (SELECT COUNT(DISTINCT city) FROM spot WHERE city IS NOT NULL AND city &lt;&gt; '') AS cityCount
+  </select>
+
+  <select id="selectRankCounts" resultType="ltd.sean.visit.dto.RankCountRow">
+    SELECT
+      rank_level AS rankLevel,
+      COUNT(*)   AS spotCount
+    FROM spot
+    GROUP BY rank_level
+  </select>
+
+  <select id="selectVisitCount" resultType="long">
+    SELECT COUNT(*) FROM visit
+  </select>
+
+  <select id="selectMonthly" resultType="ltd.sean.visit.dto.MonthCountRow">
+    SELECT
+      MONTH(visited_at) AS monthNo,
+      COUNT(*)          AS visitCount
+    FROM visit
+    WHERE YEAR(visited_at) = #{year}
+    GROUP BY MONTH(visited_at)
+  </select>
+
+  <select id="selectTopSpots" resultType="ltd.sean.visit.dto.TopSpotRow">
+    SELECT
+      s.id              AS id,
+      s.name            AS name,
+      s.avatar          AS avatar,
+      COUNT(*)          AS visitCount,
+      MAX(v.visited_at) AS lastVisitAt
+    FROM visit v
+    JOIN spot s ON s.id = v.spot_id
+    GROUP BY s.id, s.name, s.avatar
+    ORDER BY COUNT(*) DESC, MAX(v.visited_at) DESC
+    LIMIT #{limit}
+  </select>
+
+</mapper>

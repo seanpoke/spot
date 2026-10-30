@@ -1,0 +1,160 @@
+/**
+ * 地图标记样式（全局，不能用 scoped）。
+ *
+ * 原因很实在：高德 Marker 的 content 是我们用 document.createElement 造出来的 DOM，
+ * 它不在任何组件的模板里，scoped 的 data-v 属性根本不会加到它身上。
+ *
+ * 规格照 PRD 5.3 / 原型 #map：白胶囊 + 头像外一圈状态环 + 底部 7 段等级条。
+ * 环只有 1.6px 厚，只能承载色相/明度的大幅跳变 —— 四种状态色改自 config/ranks.ts 的 MARKER_RING。
+ */
+
+.mk {
+  cursor: pointer;
+}
+
+.mk__c {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px 5px 5px;
+  background: var(--card);
+  border: 1.5px solid var(--card);
+  border-radius: 13px;
+  box-shadow: 0 2px 6px rgba(17, 24, 39, 0.1), 0 8px 20px -12px rgba(17, 24, 39, 0.36);
+}
+
+/* 选中态：描边转橙 + 阴影加重，不做放大（放大会让相邻标记挤在一起） */
+.mk--on .mk__c {
+  border-color: var(--hot);
+  box-shadow: 0 4px 16px -4px rgba(255, 90, 30, 0.5), 0 10px 26px -14px rgba(17, 24, 39, 0.4);
+}
+
+.mk__av {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink3);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 环 = 状态：::after 用 inset:-3px 撑出 1.5px 白边 + 1.6px 彩环 */
+.mk__av::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1.5px var(--card), 0 0 0 3px var(--ring);
+}
+
+.mk__av img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mk__tx {
+  min-width: 0;
+}
+
+.mk__tx b {
+  display: block;
+  max-width: 92px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mk__tx span {
+  display: block;
+  margin-top: 1px;
+  color: var(--ink3);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 条 = 等级：贴胶囊下沿的 7 段细条，读长度不数格子 */
+.mk__bar {
+  position: absolute;
+  right: 6px;
+  bottom: 3px;
+  left: 6px;
+  display: flex;
+  gap: 1.5px;
+}
+
+.mk__bar i {
+  display: block;
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: #e4e7eb;
+}
+
+.mk__bar i.on {
+  background: var(--bc);
+}
+
+/* 避雷：头像去色 + 不显示刻度条（AGENTS.md 第 23 条） */
+.mk--x .mk__av img {
+  filter: grayscale(1) brightness(0.98);
+}
+
+.mk--x .mk__tx b {
+  color: #8a9099;
+}
+
+/* 当前位置：蓝色小圆点 + 光晕。蓝是「系统定位」语义，不占设计令牌里的任何一格。
+ *
+ * 类名必须带 `mk-` 前缀 —— 这里是全局样式表，任何页面里同名的类都会被打中。
+ * 踩过一次：这里叫 `.me`（46×46 的定位点），把「我的」页根节点 `div.me`
+ * 也压成 46px 宽、内容居中，整页文字变成一个字一行。
+ */
+.mk-me {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+}
+
+.mk-me__halo {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(47, 107, 255, 0.13);
+}
+
+.mk-me__core {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border: 2.5px solid var(--card);
+  border-radius: 50%;
+  background: #2f6bff;
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.3);
+}
+
+/* 临时坐标生效中：橙心 + 橙晕，跟真实定位的蓝一眼区分开（列表/距离都按它算） */
+.mk-me--temp .mk-me__halo {
+  background: rgba(255, 90, 30, 0.15);
+}
+
+.mk-me--temp .mk-me__core {
+  background: #ff5a1e;
+}
