@@ -2,6 +2,8 @@ package ltd.sean.visit.controller;
 
 import jakarta.validation.Valid;
 import ltd.sean.visit.common.ApiResult;
+import ltd.sean.visit.dto.ContactCheckRequest;
+import ltd.sean.visit.dto.ContactDuplicate;
 import ltd.sean.visit.dto.IdResponse;
 import ltd.sean.visit.dto.SpotDetail;
 import ltd.sean.visit.dto.SpotListItem;
@@ -95,9 +97,10 @@ public class SpotController {
                                     @RequestParam(required = false) String district,
                                     @RequestParam(required = false) Integer priceMin,
                                     @RequestParam(required = false) Integer priceMax,
-                                    @RequestParam(required = false, name = "q") String keyword) {
+                                    @RequestParam(required = false, name = "q") String keyword,
+                                    @RequestParam(required = false) String contact) {
         return ApiResult.ok(spotService.page(new SpotPageQuery(page, size, status, rank, tagId,
-                province, city, district, priceMin, priceMax, keyword)));
+                province, city, district, priceMin, priceMax, keyword, contact)));
     }
 
     /** 列表页筛选下拉的省 / 市 / 区选项（去重）；分页后前端拿不到全量，选项必须由服务端给 */
@@ -114,6 +117,18 @@ public class SpotController {
     @PostMapping
     public ApiResult<IdResponse> create(@Valid @RequestBody SpotSaveRequest request) {
         return ApiResult.ok(new IdResponse(spotService.create(request)));
+    }
+
+    /**
+     * 联系方式查重（保存前的预检）。
+     *
+     * <p>只提示、不拦截：返回空数组表示没有同类型重复；有冲突时前端把
+     * 「微信【x】与用户【y】的微信重复」列出来，是否继续保存由用户决定。
+     * 路径比 {@code /{id}} 长，且是 POST（详情是 GET），不会冲突。
+     */
+    @PostMapping("/contacts/check")
+    public ApiResult<List<ContactDuplicate>> checkContacts(@RequestBody ContactCheckRequest request) {
+        return ApiResult.ok(spotService.checkContactDuplicates(request.spotId(), request.contacts()));
     }
 
     @PutMapping("/{id}")

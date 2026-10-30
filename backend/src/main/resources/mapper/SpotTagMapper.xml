@@ -6,8 +6,9 @@
   为什么是一个 IN 查询而不是逐点查：列表页一次要出几十个点，
   每个点单独查标签就是 N+1，在 3 Mbps 的带宽与小主机上会明显卡（AGENTS.md 第 12 条）。
 
-  排序规则来自 PRD 5.6：spot_tag.sort_order（这一格的次序）→ tag.sort_order（全库默认）
-  → tag.name（兜底稳定），三者都写全，避免同名标签顺序在不同查询里漂移。
+  排序规则：tag.sort_order（全库优先级，在「我的 → 编辑标签」里长按拖拽维护）
+  → tag.name（兜底稳定，避免同序时顺序漂移）。关系表 spot_tag 不再存自己的排序，
+  这样详情页、列表页、编辑页看到的是同一个顺序。
 -->
 <mapper namespace="ltd.sean.visit.mapper.SpotTagMapper">
 
@@ -23,7 +24,21 @@
     <foreach collection="spotIds" item="spotId" open="(" separator="," close=")">
       #{spotId}
     </foreach>
-    ORDER BY st.spot_id, st.sort_order, t.sort_order, t.name
+    ORDER BY st.spot_id, t.sort_order, t.name
+  </select>
+
+  <!--
+    删除标签前的预检：这个标签被哪些打卡点挂着。
+    只取名字、只取前 N 条 —— 用来在确认框里说清「会影响谁」，不做全量导出。
+    MySQL 的 LIMIT 不接受命名参数以外的东西，这里直接 #{limit} 即可。
+  -->
+  <select id="selectSpotNamesByTagId" resultType="java.lang.String">
+    SELECT s.name
+    FROM spot_tag st
+    JOIN spot s ON s.id = st.spot_id
+    WHERE st.tag_id = #{tagId}
+    ORDER BY s.name
+    LIMIT #{limit}
   </select>
 
 </mapper>

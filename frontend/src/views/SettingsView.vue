@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { logout, markAnonymous } from '@/api/auth'
 import { getStats, type StatsResponse } from '@/api/stats'
 import { EXPORT_LINKS } from '@/api/export'
@@ -126,6 +126,19 @@ async function signOut(): Promise<void> {
         <span class="row__value">已设置</span>
         <span class="row__chev" aria-hidden="true" />
       </button>
+    </section>
+
+    <!-- 标签是唯一需要「全库维护」的字典：新增 / 改名 / 删除都收在这一个页面里 -->
+    <section class="card block">
+      <div class="block__head">
+        <h2 class="section-title">标签</h2>
+        <span class="meta">全库共享</span>
+      </div>
+      <RouterLink class="row" to="/tags">
+        <span class="row__label">编辑标签</span>
+        <span class="row__value">新增 · 改名 · 删除</span>
+        <span class="row__chev" aria-hidden="true" />
+      </RouterLink>
     </section>
 
     <section class="card block">

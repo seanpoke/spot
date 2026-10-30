@@ -21,4 +21,12 @@ public interface SpotTagMapper extends BaseMapper<SpotTag> {
      * {@code spot_tag.sort_order → tag.sort_order → tag.name}（PRD 5.6）。
      */
     List<SpotTagRow> selectTagRowsBySpotIds(@Param("spotIds") Collection<String> spotIds);
+
+    /**
+     * 反查「哪些打卡点挂了这个标签」的名字，按名称排序取前 limit 条。
+     *
+     * <p>只给删除前的确认弹窗用（「会影响 A、B、C 等 12 个点」），
+     * 不需要全量 —— 标签一旦被大量使用，把几百个名字塞进弹窗反而看不清。
+     */
+    List<String> selectSpotNamesByTagId(@Param("tagId") String tagId, @Param("limit") int limit);
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import RankBar from '@/components/RankBar.vue'
+import SafeImage from '@/components/SafeImage.vue'
 import TagRow from '@/components/TagRow.vue'
 import { statusLabel } from '@/config/status'
 import { formatDistance } from '@/utils/geo'
@@ -27,15 +28,7 @@ const ratingText = computed(() => (props.spot.avgRating ? props.spot.avgRating.t
 
 <template>
   <RouterLink class="prow" :to="`/spot/${spot.id}`">
-    <img
-      v-if="spot.avatar"
-      class="prow__ph"
-      :src="spot.avatar"
-      alt=""
-      loading="lazy"
-      decoding="async"
-    />
-    <span v-else class="prow__ph prow__ph--empty">{{ spot.name.slice(0, 1) }}</span>
+    <SafeImage class="prow__ph" :src="spot.avatar" kind="avatar" alt="" />
 
     <div class="prow__m">
       <b>{{ spot.name }}</b>

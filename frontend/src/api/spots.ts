@@ -249,6 +249,11 @@ export interface SpotPageQuery {
   priceMax?: number
   /** 名称或地址模糊匹配 */
   keyword?: string
+  /**
+   * 联系方式模糊匹配（电话 / 微信 / QQ / TG / 与你，跨类型搜）。
+   * 电话可以只敲数字：库里存成 138-0013-8000 也能命中，剥分隔符在服务端做。
+   */
+  contact?: string
 }
 
 export interface SpotPage {
@@ -288,6 +293,7 @@ export function pageSpots(query: SpotPageQuery = {}): Promise<SpotPage> {
   if (query.priceMin != null) params.set('priceMin', String(query.priceMin))
   if (query.priceMax != null) params.set('priceMax', String(query.priceMax))
   if (query.keyword) params.set('q', query.keyword)
+  if (query.contact) params.set('contact', query.contact)
   return http.get<SpotPage>(`/spots/page?${params.toString()}`)
 }
 
@@ -309,4 +315,29 @@ export function updateSpot(id: string, payload: SpotSaveRequest): Promise<void> 
 
 export function deleteSpot(id: string): Promise<void> {
   return http.delete<void>(`/spots/${id}`)
+}
+
+/** 一条「可能重复」的联系方式：我填的这条和别人家的同类型撞了 */
+export interface ContactDuplicate {
+  type: SpotContactType
+  /** 我表单里的值（原样展示） */
+  value: string
+  /** 撞上的打卡点，用于「跳转」 */
+  otherSpotId: string
+  /** 撞上的打卡点名，展示成蓝色可点 */
+  otherSpotName: string
+}
+
+/**
+ * 联系方式查重（保存前 / 手动点「查重」都走它）。
+ *
+ * 传的是**表单当前值**，不是库里已存的：改完还没保存也要能看见冲突。
+ * `spotId` 传 null 表示新建（没有「自己」要排除）。
+ * 后端只比同类型、电话剥分隔符与 +86、其余忽略大小写。
+ */
+export function checkContactDuplicates(
+  spotId: string | null,
+  contacts: SpotContact[],
+): Promise<ContactDuplicate[]> {
+  return http.post<ContactDuplicate[]>('/spots/contacts/check', { spotId, contacts })
 }

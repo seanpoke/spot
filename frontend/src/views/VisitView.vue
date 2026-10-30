@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import RankPicker from '@/components/RankPicker.vue'
+import SafeImage from '@/components/SafeImage.vue'
 import { getSpot, type SpotDetail, type PhotoRef } from '@/api/spots'
 import {
   createVisit,
@@ -308,8 +309,7 @@ watch(
       </header>
 
       <section class="card spot-line">
-        <img v-if="spot.avatar" class="spot-line__avatar" :src="spot.avatar" :alt="spot.name" />
-        <span v-else class="spot-line__avatar spot-line__avatar--text">{{ spot.name.slice(0, 1) }}</span>
+        <SafeImage class="spot-line__avatar" :src="spot.avatar" kind="avatar" :alt="spot.name" />
         <div class="spot-line__text">
           <strong class="spot-line__name">{{ spot.name }}</strong>
           <span class="meta">{{ historyLine }}</span>
@@ -424,7 +424,7 @@ watch(
       <section class="card block">
         <div class="photogrid">
           <div v-for="(photo, index) in form.photos" :key="photo.id" class="photogrid__item">
-            <img :src="photo.thumb" :alt="`照片 ${index + 1}`" loading="lazy" decoding="async" />
+            <SafeImage :src="photo.thumb" :alt="`照片 ${index + 1}`" />
             <button type="button" class="photogrid__del" :aria-label="`删除第 ${index + 1} 张`" @click="removePhoto(index)">×</button>
           </div>
           <button

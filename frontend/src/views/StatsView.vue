@@ -4,6 +4,7 @@ import { HttpError } from '@/api/http'
 import { getStats, type StatsResponse } from '@/api/stats'
 import { getTimeline, type TimelineItem, type TimelineSummary } from '@/api/visits'
 import { RANKS } from '@/config/ranks'
+import SafeImage from '@/components/SafeImage.vue'
 import TabBar from '@/components/TabBar.vue'
 import TimelineList from '@/components/TimelineList.vue'
 
@@ -214,15 +215,7 @@ onMounted(() => {
           :to="`/spot/${item.id}`"
         >
           <span class="top__rank num">{{ index + 1 }}</span>
-          <img
-            v-if="item.avatar"
-            class="top__ph"
-            :src="item.avatar"
-            :alt="item.name"
-            loading="lazy"
-            decoding="async"
-          />
-          <span v-else class="top__ph top__ph--empty">{{ item.name.slice(0, 1) }}</span>
+          <SafeImage class="top__ph" :src="item.avatar" kind="avatar" :alt="item.name" />
           <div class="top__main">
             <b>{{ item.name }}</b>
             <span class="meta">{{ item.visitCount }} 次 · 上次 {{ lastVisitText(item.lastVisitAt) }}</span>

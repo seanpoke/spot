@@ -15,6 +15,7 @@ import {
 } from '@/config/amap'
 import MapPicker from '@/components/MapPicker.vue'
 import RankBar from '@/components/RankBar.vue'
+import SafeImage from '@/components/SafeImage.vue'
 import { createMeMarker, createSpotMarker } from '@/components/mapMarker'
 import { RANKS, rankOf } from '@/config/ranks'
 import { SPOT_STATUSES, statusLabel } from '@/config/status'
@@ -467,12 +468,33 @@ const panelState = computed<PanelState>(() => {
   return 'half'
 })
 
+/**
+ * 取坐标，取不到就返回 null（调用方一律跳过这个点）。
+ *
+ * 用 typeof 判而不是 `!== undefined`：`lat: null` 也能漏进来 ——
+ * 现在靠后端 `default-property-inclusion: non_null` 把 null 字段省掉才安全，
+ * 一旦那条配置变了，`[null, null]` 会把标记画到 (0,0)（几内亚湾）。
+ * 顺带挡掉 NaN 与「只有纬度没有经度」的半坐标。
+ */
 function coordsOf(spot: SpotListItem): LatLng | null {
-  if (spot.lat === undefined || spot.lng === undefined) {
+  if (typeof spot.lat !== 'number' || typeof spot.lng !== 'number') {
+    return null
+  }
+  if (!Number.isFinite(spot.lat) || !Number.isFinite(spot.lng)) {
     return null
   }
   return { lat: spot.lat, lng: spot.lng }
 }
+
+/**
+ * 真正会画到地图上的标记数（= 有坐标的那些）。
+ *
+ * 顶部条不能用 `markerRows.length`：zoom<10 与搜索走的是城市列表，
+ * 那份数据里含无坐标的点（它们只在下方抽屉里出现），直接数会把「N 个点」说多。
+ */
+const drawnMarkerCount = computed(
+  () => markerRows.value.filter((row) => coordsOf(row.spot) !== null).length,
+)
 
 /** 标记上的两行文案：已打卡给分数，其余给状态，有距离才补距离 */
 function markerMeta(row: SpotRow): string {
@@ -1445,7 +1467,7 @@ onBeforeUnmount(() => {
     </div>
 
     <header class="btop">
-      <span class="btop__count">{{ markerRows.length }} 个点</span>
+      <span class="btop__count">{{ drawnMarkerCount }} 个点</span>
       <h1 class="btop__title">附近榜</h1>
       <div class="btop__acts">
         <button class="round" type="button" aria-label="搜索" @click="toggleSearch">
@@ -1482,15 +1504,7 @@ onBeforeUnmount(() => {
       <li v-if="searching" class="sugs__hint">搜索中…</li>
       <li v-for="row in suggestions" :key="row.spot.id">
         <button type="button" @click="pickSuggestion(row)">
-          <img
-            v-if="row.spot.avatar"
-            class="sugs__ph"
-            :src="row.spot.avatar"
-            :alt="row.spot.name"
-            loading="lazy"
-            decoding="async"
-          />
-          <span v-else class="sugs__ph sugs__ph--empty">{{ row.spot.name.slice(0, 1) }}</span>
+          <SafeImage class="sugs__ph" :src="row.spot.avatar" kind="avatar" :alt="row.spot.name" />
           <span class="sugs__main">
             <b>{{ row.spot.name }}</b>
             <span>{{ rowMeta(row) }}</span>

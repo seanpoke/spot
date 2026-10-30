@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import SafeImage from '@/components/SafeImage.vue'
 import type { PhotoRef } from '@/api/spots'
 
 /**
@@ -105,13 +106,13 @@ onBeforeUnmount(() => {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <img
+        <SafeImage
           class="lb__img"
           :class="{ 'lb__img--drag': dragging }"
           :src="current.large"
           :alt="`第 ${index + 1} 张照片`"
           :style="dragX ? { transform: `translateX(${dragX}px)` } : undefined"
-          decoding="async"
+          loading="eager"
           draggable="false"
         />
       </div>

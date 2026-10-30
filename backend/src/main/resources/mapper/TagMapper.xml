@@ -14,7 +14,8 @@
       t.id         AS id,        <!-- 标签 id -->
       t.name       AS name,      <!-- 标签名 -->
       t.color      AS color,     <!-- 标签颜色 #RRGGBB -->
-      t.sort_order AS sortOrder, <!-- 全库默认次序 -->
+      t.category   AS category,  <!-- 分类 code，编辑页按它分组 -->
+      t.sort_order AS sortOrder, <!-- 全库优先级 -->
       COUNT(st.tag_id) AS useCount <!-- 被多少个打卡点使用 -->
     FROM tag t
     LEFT JOIN spot_tag st ON st.tag_id = t.id

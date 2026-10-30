@@ -18,7 +18,7 @@ import TabBar from '@/components/TabBar.vue'
 /**
  * 列表页（`/list`）。
  *
- * 所有条件（省市区 / 状态 / 等级 / 标签 / 价格 / 关键字）都下发到服务端，**筛完再切页**：
+ * 所有条件（省市区 / 状态 / 等级 / 标签 / 价格 / 关键字 / 联系方式）都下发到服务端，**筛完再切页**：
  * 服务端分页必须这样，否则第 2 页会把第 1 页筛掉的行捡回来，条数与结果都是错的。
  * 每页 20 条，点「加载更多」续页；条件一变（防抖 300ms）就回到第 1 页。
  *
@@ -42,6 +42,7 @@ const MAX_RESTORE_PAGES = 10
 
 interface SavedFilters {
   keyword: string
+  contact: string
   province: string
   city: string
   district: string
@@ -67,6 +68,8 @@ const list = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[])
 
 /** 输入框里的关键字（防抖后才发请求） */
 const keyword = ref(text(restored.keyword))
+/** 联系方式搜索框（电话可只敲数字，剥分隔符由服务端做） */
+const contact = ref(text(restored.contact))
 const province = ref(text(restored.province))
 const city = ref(text(restored.city))
 const district = ref(text(restored.district))
@@ -167,7 +170,8 @@ const hasFilter = computed(
     tagIds.value.length > 0 ||
     priceMin.value !== '' ||
     priceMax.value !== '' ||
-    keyword.value.trim() !== '',
+    keyword.value.trim() !== '' ||
+    contact.value.trim() !== '',
 )
 
 function resetFilters(): void {
@@ -180,6 +184,7 @@ function resetFilters(): void {
   priceMin.value = ''
   priceMax.value = ''
   keyword.value = ''
+  contact.value = ''
 }
 
 // 上一级换了，下一级的选择就没有意义了
@@ -208,6 +213,7 @@ function buildQuery(page: number): SpotPageQuery {
     priceMin: toPrice(priceMin.value) ?? undefined,
     priceMax: toPrice(priceMax.value) ?? undefined,
     keyword: keyword.value.trim() || undefined,
+    contact: contact.value.trim() || undefined,
   }
 }
 
@@ -275,6 +281,7 @@ function persistFilters(): void {
   try {
     const snapshot: SavedFilters = {
       keyword: keyword.value,
+      contact: contact.value,
       province: province.value,
       city: city.value,
       district: district.value,
@@ -302,6 +309,7 @@ const filterKey = computed(() =>
     priceMin.value,
     priceMax.value,
     keyword.value.trim(),
+    contact.value.trim(),
   ]),
 )
 
@@ -411,6 +419,16 @@ onBeforeUnmount(() => {
     </header>
 
     <section class="card filters">
+      <label class="field">
+        <span class="field__label">联系方式</span>
+        <input
+          v-model="contact"
+          class="field__input"
+          type="search"
+          placeholder="电话 / 微信 / QQ / TG，电话可只敲数字"
+        />
+      </label>
+
       <label class="field">
         <span class="field__label">名称 / 地址</span>
         <input v-model="keyword" class="field__input" type="search" placeholder="模糊匹配，如「武汉」「咖啡」" />

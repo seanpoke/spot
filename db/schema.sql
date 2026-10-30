@@ -19,6 +19,7 @@ USE `visit_db`;
 DROP TABLE IF EXISTS `visit`;
 DROP TABLE IF EXISTS `spot_tag`;
 DROP TABLE IF EXISTS `tag`;
+DROP TABLE IF EXISTS `tag_category`;
 DROP TABLE IF EXISTS `spot`;
 
 
@@ -97,6 +98,39 @@ CREATE TABLE `visit` (
 
 
 -- =============================================================================
+-- 表：tag_category —— 标签分类（类型）字典
+-- -----------------------------------------------------------------------------
+-- 标签按分类分组展示（编辑页分组、标签管理页的类型行），分类本身也能在
+-- 「我的 → 编辑标签」里新增和删除，所以必须落库而不是写死在前端。
+-- tag.category 存的就是这里的 code；两者之间**不建外键**：读接口对未知 code
+-- 一律兜底成 other，删分类时也由应用层把标签改归 other —— 有外键反而会让
+-- 一次删分类卡在约束上，还可能因为历史脏值连列表都读不出来。
+-- other（其他）是兜底分类，删不掉。
+-- =============================================================================
+CREATE TABLE `tag_category` (
+  `code`       VARCHAR(16)  NOT NULL                      COMMENT '分类 code，小写字母开头，最长 16；新建时后端生成，用户只填显示名',
+  `label`      VARCHAR(12)  NOT NULL                      COMMENT '显示名，如「人物」「场所」，全库唯一',
+  `sort_order` INT          NOT NULL DEFAULT 1            COMMENT '顺序：1 起连续，小的排前面。决定编辑页分组顺序与标签管理页的类型排布',
+  `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                                          COMMENT '创建时间',
+  PRIMARY KEY (`code`),
+  UNIQUE KEY `uk_tag_category_label` (`label`) COMMENT '类型名不可重复，兼作按名查找',
+  KEY `idx_tag_category_sort` (`sort_order`)   COMMENT '类型列表排序'
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_0900_ai_ci
+  COMMENT='标签分类（类型）';
+
+-- 种子分类：顺序即编辑页分组顺序。「其他」必须在，且不能删
+INSERT INTO `tag_category` (`code`, `label`, `sort_order`) VALUES
+  ('person',  '人物', 1),
+  ('place',   '场所', 2),
+  ('service', '服务', 3),
+  ('vibe',    '氛围', 4),
+  ('other',   '其他', 5);
+
+
+-- =============================================================================
 -- 表：tag —— 标签字典
 -- -----------------------------------------------------------------------------
 -- 用户自己维护的标签库（按摩、木桶浴、日式、安静……），不是代码里写死的枚举。
@@ -107,7 +141,8 @@ CREATE TABLE `tag` (
   `id`         CHAR(36)     NOT NULL                      COMMENT '标签ID，UUID',
   `name`       VARCHAR(24)  NOT NULL                      COMMENT '标签名，建议不超过 8 个汉字，全库唯一',
   `color`      VARCHAR(9)   DEFAULT NULL                  COMMENT '标签颜色，前端新建标签时可选，存 #RRGGBB，未选为空',
-  `sort_order` INT          NOT NULL DEFAULT 0            COMMENT '排序值，小的排前面：列表截断时靠前的先露脸',
+  `category`   VARCHAR(16)  NOT NULL DEFAULT 'other'       COMMENT '分类 code，对应 tag_category.code（种子：person人物 / place场所 / service服务 / vibe氛围 / other其他）；分类可由用户增删，删分类时其下标签改归 other',
+  `sort_order` INT          NOT NULL DEFAULT 1            COMMENT '优先级：1 开始连续，小的排前面。「我的 → 编辑标签」长按拖拽后全量重排，这是标签顺序的唯一来源',
   `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
                                                           COMMENT '创建时间',
   PRIMARY KEY (`id`),
@@ -123,18 +158,18 @@ CREATE TABLE `tag` (
 -- 表：spot_tag —— 打卡点标签关系
 -- -----------------------------------------------------------------------------
 -- 一个打卡点可挂多个标签，一个标签也可被多个打卡点复用。
--- sort_order 是「这个标签在这个打卡点上的展示顺序」，决定列表被截断时谁先出现，
--- 与 tag.sort_order 是两回事：前者是这一格的取舍，后者是全库的默认次序。
--- 排序规则：spot_tag.sort_order 升序 → tag.sort_order 升序 → tag.name 升序。
+-- **关系表不存顺序**：标签在哪个点上都按 tag.sort_order 展示（全库优先级，
+-- 在「我的 → 编辑标签」里长按拖拽维护）。以前这里有一个 sort_order 表示
+-- 「这个标签在这个点上的次序」，等于同一件事两种口径，同一批标签在详情页、
+-- 列表页、编辑页里会排出不同顺序 —— 已废弃。
 -- =============================================================================
 CREATE TABLE `spot_tag` (
   `spot_id`    CHAR(36)  NOT NULL                         COMMENT '打卡点ID',
   `tag_id`     CHAR(36)  NOT NULL                         COMMENT '标签ID',
-  `sort_order` INT       NOT NULL DEFAULT 0               COMMENT '该标签在此打卡点上的展示顺序，小在前',
   `created_at` DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                                          COMMENT '打标签时间',
+                                                         COMMENT '打标签时间',
   PRIMARY KEY (`spot_id`, `tag_id`),
-  KEY `idx_st_spot` (`spot_id`, `sort_order`)  COMMENT '按打卡点取标签并按展示顺序排，列表页主用',
+  KEY `idx_st_spot` (`spot_id`)                COMMENT '按打卡点取标签（顺序由 tag.sort_order 决定）',
   KEY `idx_st_tag`  (`tag_id`)                 COMMENT '按标签反查打卡点，筛选与统计用',
   CONSTRAINT `fk_st_spot` FOREIGN KEY (`spot_id`)
     REFERENCES `spot` (`id`) ON DELETE CASCADE,
@@ -257,7 +292,7 @@ SELECT
 FROM `spot_tag` st
 JOIN `tag` t ON t.`id` = st.`tag_id`
 WHERE st.`spot_id` IN (?, ?, ?)
-ORDER BY st.`spot_id`, st.`sort_order`, t.`sort_order`, t.`name`;
+ORDER BY st.`spot_id`, t.`sort_order`, t.`name`;
 
 -- 按标签筛打卡点：点某一标签，列出所有挂了它的打卡点
 SELECT s.`id`, s.`name`, s.`cover`, s.`rank_level`, s.`status`
@@ -278,4 +313,4 @@ ORDER BY t.`sort_order`, use_count DESC;
 
 -- 保存某打卡点的标签：整组覆盖（先删后插），在一个事务里做
 DELETE FROM `spot_tag` WHERE `spot_id` = ?;
-INSERT INTO `spot_tag` (`spot_id`, `tag_id`, `sort_order`) VALUES (?, ?, ?), (?, ?, ?);
+INSERT INTO `spot_tag` (`spot_id`, `tag_id`) VALUES (?, ?), (?, ?);

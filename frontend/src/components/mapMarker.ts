@@ -9,6 +9,7 @@
  */
 
 import type { SpotListItem } from '@/api/spots'
+import defaultAvatar from '@/assets/default-avatar.png'
 import { RANKS, clampLevel, rankOf, ringColor } from '@/config/ranks'
 import '@/styles/map.css'
 
@@ -29,17 +30,22 @@ export function createSpotMarker(spot: SpotListItem, meta: string, selected: boo
   const avatar = document.createElement('span')
   avatar.className = 'mk__av'
   avatar.style.setProperty('--ring', ringColor(spot.status))
-  if (spot.avatar) {
-    const img = document.createElement('img')
-    img.src = spot.avatar
-    img.alt = ''
-    img.loading = 'lazy'
-    img.decoding = 'async'
-    avatar.appendChild(img)
-  } else {
-    // 没头像时用名字首字兜底，别留一个灰洞
-    avatar.textContent = spot.name.slice(0, 1)
-  }
+  // 没头像、或图片加载失败，都退回本地默认头像。
+  // 这里的 DOM 活在 Vue 之外（高德 Marker 只收元素），所以兜底手写，没有 SafeImage 可用
+  const img = document.createElement('img')
+  img.alt = ''
+  img.loading = 'lazy'
+  img.decoding = 'async'
+  img.src = spot.avatar || defaultAvatar
+  let fellBack = false
+  img.addEventListener('error', () => {
+    if (fellBack) {
+      return
+    }
+    fellBack = true
+    img.src = defaultAvatar
+  })
+  avatar.appendChild(img)
 
   const text = document.createElement('span')
   text.className = 'mk__tx'

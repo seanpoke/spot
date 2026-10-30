@@ -13,7 +13,8 @@ import { installSpotEntryTracker } from './spotEntry'
  *   /spot/:id/visit/new   到访录入
  *   /timeline             → 重定向到 /stats（原「狂人日志」整页已并成统计页的一张卡）
  *   /stats                统计          总量 + 段位分布 + 每月到访 + 去得最多 + 狂人日志
- *   /settings             设置          全量导出（JSON / CSV）+ 口令说明 + 退出登录
+ *   /settings             设置          全量导出（JSON / CSV）+ 标签管理入口 + 口令说明 + 退出登录
+ *   /tags                 标签管理      标签的新增 / 改名 / 删除（从「我的」进）
  *   /gate                 口令门
  *   /spot/new、/spot/:id/edit、/visit/:id/edit  表单页
  *
@@ -78,6 +79,12 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
+    },
+    {
+      // 标签的全库维护入口：只从「我的」进，不在 TabBar 上占位
+      path: '/tags',
+      name: 'tags',
+      component: () => import('@/views/TagManageView.vue'),
     },
     {
       // 环境自检：不是正式页面，从地图页右上角「⋯」进来

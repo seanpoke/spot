@@ -16,6 +16,11 @@ import java.time.LocalDateTime;
  *
  * <p>保存标签的推荐做法（与 schema.sql 末尾示例一致）：一个事务里先
  * {@code delete by spot_id} 再批量插入，整组覆盖。
+ *
+ * <p><b>关系表不再带自己的排序</b>：标签在哪个点上都按 {@code tag.sort_order}
+ * （全库优先级，在「我的 → 编辑标签」里长按拖拽维护）展示。以前这里有一个
+ * {@code sort_order} 表示「这个标签在这个点上的次序」，等于同一件事有两种口径，
+ * 结果就是同一批标签在详情页、列表页、编辑页里顺序不一致 —— 现在统一以 tag 表为准。
  */
 @Data
 @TableName("spot_tag")
@@ -25,9 +30,6 @@ public class SpotTag {
     private String spotId;
 
     private String tagId;
-
-    /** 该标签在此打卡点上的展示顺序，小在前（决定列表截断时谁先露脸） */
-    private Integer sortOrder;
 
     private LocalDateTime createdAt;
 }

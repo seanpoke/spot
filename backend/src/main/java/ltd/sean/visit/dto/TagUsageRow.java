@@ -16,6 +16,9 @@ public class TagUsageRow {
 
     private String color;
 
+    /** 分类 code，编辑页按它分组展示 */
+    private String category;
+
     private Integer sortOrder;
 
     /** 被引用的次数，0 表示闲置 */

@@ -7,7 +7,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ltd.sean.visit.common.BizException;
 import ltd.sean.visit.config.AppProperties;
+import ltd.sean.visit.dto.ContactDuplicate;
 import ltd.sean.visit.dto.ContactItem;
+import ltd.sean.visit.dto.ContactOwnerRow;
 import ltd.sean.visit.dto.ImageRef;
 import ltd.sean.visit.dto.PackageItem;
 import ltd.sean.visit.dto.SpotChild;
@@ -58,7 +60,7 @@ import java.util.Set;
  *   <li>标签与到访统计都是<b>批量一次取回</b>再按 spotId 归组，禁止循环查库</li>
  *   <li>图片字段只存相对路径，出参统一过 {@link AppProperties#toPublicUrl(String)}</li>
  *   <li>表单是整体提交，null = 清空（Entity 上已用 updateStrategy=ALWAYS 保证生效）</li>
- *   <li>标签整组覆盖：先删后插，顺序即 {@code spot_tag.sort_order}</li>
+ *   <li>标签整组覆盖：先删后插；展示顺序不看关系表，一律取 {@code tag.sort_order}</li>
  * </ul>
  */
 @Slf4j
@@ -84,6 +86,16 @@ public class SpotService {
     /** 电话只收这些字符（+ 国家码、- 分隔、空格、括号），且至少 5 位数字 */
     private static final java.util.regex.Pattern PHONE_PATTERN =
             java.util.regex.Pattern.compile("^[+\\d\\s()-]{5,30}$");
+    /**
+     * 联系方式搜索框里「只由数字与分隔符组成」的输入（13800138000 / 138-0013-8000 / (027) 8888 6666）。
+     * 命中这个形状就把分隔符从两边都剥掉再比，否则用户照着号码敲一遍，搜不到库里存成 138-0013-8000 的那条。
+     */
+    private static final java.util.regex.Pattern CONTACT_DIGIT_INPUT =
+            java.util.regex.Pattern.compile("^[\\d\\s()+\\-./]+$");
+    /** value 去掉常见电话分隔符后的形态（配合 CONTACT_DIGIT_INPUT 使用，走不了索引，个人自用量级无所谓） */
+    private static final String CONTACT_VALUE_DIGITS =
+            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE("
+                    + "c.value,'-',''),' ',''),'(',''),')',''),'.',''),'+','')";
     /** 列表页每页上限：再大就失去分页的意义，与分页插件的 maxLimit 同量级 */
     private static final int MAX_PAGE_SIZE = 100;
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -286,6 +298,8 @@ public class SpotService {
             String kw = query.keyword().trim();
             wrapper.and(w -> w.like("name", kw).or().like("address", kw));
         }
+
+        applyContact(wrapper, query.contact());
 
         wrapper.orderByDesc("rank_level").orderByAsc("name").orderByAsc("id");
 
@@ -530,11 +544,11 @@ public class SpotService {
 
         // 整组覆盖：先删后插，一个事务内完成
         spotTagMapper.delete(new QueryWrapper<SpotTag>().eq("spot_id", spotId));
-        for (int index = 0; index < tagIds.size(); index++) {
+        // 关系表不存顺序：展示顺序一律取 tag.sort_order（全库优先级）
+        for (String tagId : tagIds) {
             SpotTag relation = new SpotTag();
             relation.setSpotId(spotId);
-            relation.setTagId(tagIds.get(index));
-            relation.setSortOrder(index);
+            relation.setTagId(tagId);
             spotTagMapper.insert(relation);
         }
     }
@@ -604,6 +618,68 @@ public class SpotService {
             throw new BizException(400, "联系方式最多 " + MAX_CONTACTS + " 条");
         }
         return result;
+    }
+
+    /**
+     * 联系方式查重：当前表单里的每一条，去和**其他打卡点**的同类型联系方式比对。
+     *
+     * <p>规则：
+     * <ul>
+     *   <li>只比同类型（微信比微信、电话比电话）—— 跨类型撞上也没有意义</li>
+     *   <li>电话先剥掉 - 空格 括号 . + 再比，所以 {@code 138-0013-8000} 与 {@code 13800138000} 算同一条；
+     *       13 位且以 86 开头的还会去掉国家码（{@code +86 138…} 与 {@code 138…} 同号）</li>
+     *   <li>其余类型 trim + 忽略大小写（微信号、TG 用户名在不同人手里大小写写法很随意）</li>
+     *   <li>排除自己（{@code spotId}），否则改完保存必然「和自己重复」</li>
+     * </ul>
+     *
+     * <p>这是<b>提示</b>不是拦截：同名两台手机号、同一个店主的两个号都真实存在，
+     * 前端把冲突摊开给人看，是否继续保存由用户决定。
+     */
+    public List<ContactDuplicate> checkContactDuplicates(String spotId, List<ContactItem> raw) {
+        List<ContactItem> contacts = normalizeContacts(raw);
+        if (contacts.isEmpty()) {
+            return List.of();
+        }
+        String selfId = StringUtils.hasText(spotId) ? spotId.trim() : null;
+        Set<String> types = new HashSet<>();
+        for (ContactItem item : contacts) {
+            types.add(item.type());
+        }
+
+        List<ContactOwnerRow> candidates = spotContactMapper.selectContactsWithSpotName(types, selfId);
+        // 候选按归一化后的值建索引，再一次遍历表单 —— 避免「每条联系方式都扫一遍全库」
+        Map<String, List<ContactOwnerRow>> index = new HashMap<>();
+        for (ContactOwnerRow row : candidates) {
+            index.computeIfAbsent(contactKey(row.getType(), row.getValue()), key -> new ArrayList<>()).add(row);
+        }
+
+        List<ContactDuplicate> duplicates = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (ContactItem item : contacts) {
+            String key = contactKey(item.type(), item.value());
+            for (ContactOwnerRow row : index.getOrDefault(key, List.of())) {
+                // 同一个点上挂了两条一样的（历史数据）只报一次
+                if (!seen.add(key + "|" + row.getSpotId())) {
+                    continue;
+                }
+                duplicates.add(new ContactDuplicate(
+                        item.type(), item.value(), row.getSpotId(), row.getSpotName()));
+            }
+        }
+        return duplicates;
+    }
+
+    /** 查重用的归一化键：类型 + 洗净后的值（只做比较，不写回库） */
+    private String contactKey(String type, String value) {
+        String trimmed = value == null ? "" : value.trim();
+        if ("phone".equals(type)) {
+            String digits = trimmed.replaceAll("\\D", "");
+            if (digits.length() == 13 && digits.startsWith("86")) {
+                digits = digits.substring(2);
+            }
+            return type + "|" + digits;
+        }
+        return type + "|" + trimmed.toLowerCase(java.util.Locale.ROOT);
     }
 
     private List<SpotListItem> toListItems(List<Spot> spots) {
@@ -712,6 +788,32 @@ public class SpotService {
     private void applyText(QueryWrapper<Spot> wrapper, String column, String value) {
         if (StringUtils.hasText(value)) {
             wrapper.eq(column, value.trim());
+        }
+    }
+
+    /**
+     * 联系方式搜索：跨类型模糊匹配 {@code spot_contact.value}（电话 / 微信 / QQ / TG / 与你都搜）。
+     *
+     * <p>用 {@code EXISTS} 子查询而不是 JOIN：一个点可能有多条联系方式，JOIN 会让同一条在分页里
+     * 出现多次，条数也算错；子查询能被 {@code idx_contact_spot(spot_id, sort_order)} 驱动。
+     *
+     * <p>电话兼容分隔符：库里可能是 {@code 138-0013-8000} / {@code +86 138 0013 8000}，
+     * 用户一般照着号码敲纯数字。所以输入只含数字与分隔符时，两边都先把分隔符剥掉再比；
+     * 其他情况（微信号、TG 用户名）按原样 LIKE。剥分隔符意味着 value 上没法走索引，
+     * 个人自用的数据量（百级）可以直接接受。
+     */
+    private void applyContact(QueryWrapper<Spot> wrapper, String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return;
+        }
+        String raw = keyword.trim();
+        String digits = raw.replaceAll("\\D", "");
+        if (!digits.isEmpty() && CONTACT_DIGIT_INPUT.matcher(raw).matches()) {
+            wrapper.apply("EXISTS (SELECT 1 FROM spot_contact c WHERE c.spot_id = spot.id"
+                    + " AND " + CONTACT_VALUE_DIGITS + " LIKE CONCAT('%', {0}, '%'))", digits);
+        } else {
+            wrapper.apply("EXISTS (SELECT 1 FROM spot_contact c WHERE c.spot_id = spot.id"
+                    + " AND c.value LIKE CONCAT('%', {0}, '%'))", raw);
         }
     }
 

@@ -37,11 +37,14 @@
   --el-font-size-base: 13.5px;
 }
 
-/* 弹层挂在 body 下，主色变量要再落一层，否则抽屉/下拉仍是默认蓝 */
+/* 弹层挂在 body 下，主色变量要再落一层，否则抽屉/下拉仍是默认蓝。
+   .el-message-box 是确认框与重命名输入框（类型改名用它），漏掉的话「保存 / 删除」
+   会露出 EP 默认蓝，跟墨黑主色的设计冲突。 */
 .el-popper,
 .el-drawer,
 .el-dialog,
-.el-message {
+.el-message,
+.el-message-box {
   --el-color-primary: #111318;
   --el-border-radius-base: 12px;
 }

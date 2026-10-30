@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import SafeImage from '@/components/SafeImage.vue'
 import type { TimelineItem } from '@/api/visits'
 
 /**
@@ -94,15 +95,12 @@ function dateText(visitedAt: string): string {
         class="tlog__row"
         :to="`/spot/${item.spotId}`"
       >
-        <img
-          v-if="item.spotAvatar"
+        <SafeImage
           class="tlog__ph"
           :src="item.spotAvatar"
+          kind="avatar"
           :alt="item.spotName ?? ''"
-          loading="lazy"
-          decoding="async"
         />
-        <span v-else class="tlog__ph tlog__ph--empty">{{ (item.spotName ?? '?').slice(0, 1) }}</span>
 
         <div class="tlog__main">
           <div class="tlog__top">

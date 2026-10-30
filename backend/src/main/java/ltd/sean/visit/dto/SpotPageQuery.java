@@ -22,6 +22,8 @@ import java.util.List;
  * @param priceMin   价格下限（元）：点位价位跨度的 <b>最高价</b> 要 ≥ 它，等价于「区间有重叠」
  * @param priceMax   价格上限（元）：点位价位跨度的 <b>最低价</b> 要 ≤ 它
  * @param keyword    名称或地址模糊匹配（地址不在列表出参里，只能服务端查）
+ * @param contact    联系方式模糊匹配（电话 / 微信 / QQ / TG / 与你，跨类型搜 spot_contact.value）；
+ *                   输入只含数字与分隔符时按「剥掉分隔符的数字」比，见 SpotService.applyContact
  */
 public record SpotPageQuery(
         int page,
@@ -34,6 +36,7 @@ public record SpotPageQuery(
         String district,
         Integer priceMin,
         Integer priceMax,
-        String keyword
+        String keyword,
+        String contact
 ) {
 }

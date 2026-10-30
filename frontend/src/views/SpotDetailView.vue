@@ -5,9 +5,13 @@ import { ElMessage } from 'element-plus'
 import RankBar from '@/components/RankBar.vue'
 import PhotoLightbox from '@/components/PhotoLightbox.vue'
 import ActionSheet from '@/components/ActionSheet.vue'
+import ContactDuplicateDialog from '@/components/ContactDuplicateDialog.vue'
+import SafeImage from '@/components/SafeImage.vue'
 import {
+  checkContactDuplicates,
   getSpot,
   updateSpot,
+  type ContactDuplicate,
   type SpotContactType,
   type SpotDetail,
   type SpotSaveRequest,
@@ -184,6 +188,39 @@ const contactGroups = computed(() => groupContacts(contacts.value))
 
 /** 当前在底部选项框里展开的那一条；null = 选项框关着 */
 const sheetRow = ref<ContactRow | null>(null)
+
+/**
+ * 联系方式查重（详情页入口）。
+ *
+ * 详情页是「看已保存的数据」，所以直接把库里的联系方式丢给同一个查重接口，
+ * 弹同一个 `ContactDuplicateDialog`：有冲突时点蓝色用户名能跳过去看是谁。
+ * 跳转带 `?back=`，从对方详情返回时回到这一页。
+ */
+const dupOpen = ref(false)
+const dupList = ref<ContactDuplicate[]>([])
+const checkingDup = ref(false)
+
+async function runContactCheck(): Promise<void> {
+  const current = spot.value
+  if (!current || checkingDup.value) return
+  const filled = (current.contacts ?? [])
+    .filter((item) => !!item.value?.trim())
+    .map((item) => ({ type: item.type, value: item.value }))
+  if (!filled.length) {
+    ElMessage.info('这个点还没有填联系方式')
+    return
+  }
+
+  checkingDup.value = true
+  try {
+    dupList.value = await checkContactDuplicates(current.id, filled)
+    dupOpen.value = true
+  } catch (error) {
+    ElMessage.error(error instanceof HttpError ? error.message : '查重失败，请重试')
+  } finally {
+    checkingDup.value = false
+  }
+}
 
 /**
  * 选项框只留三条：打开 XXX / 复制 / 取消。
@@ -366,6 +403,14 @@ async function load(): Promise<void> {
  * 列表页来的回列表、统计页来的回统计，没有来历才回首页地图，不要无脑回首页。
  */
 function goBack(): void {
+  // 显式来源优先：从编辑页的「联系方式重复」弹窗跳过来时带了 ?back=，
+  // 点返回就回那一页（编辑到一半的页面），而不是按「人物回挂靠场所」的规则跳走。
+  const back = route.query.back
+  if (typeof back === 'string' && back.startsWith('/') && !back.startsWith('//')) {
+    void router.replace(back)
+    return
+  }
+
   const parentId = spot.value?.parentSpotId
   if (parentId) {
     void router.replace(`/spot/${parentId}`)
@@ -402,7 +447,7 @@ watch(spotId, load, { immediate: true })
 
     <template v-else-if="spot">
       <header v-if="spot.cover" class="hero">
-        <img class="hero__img" :src="spot.cover" :alt="spot.name" />
+        <SafeImage class="hero__img" :src="spot.cover" :alt="spot.name" loading="eager" />
         <button class="icon-btn hero__back" type="button" aria-label="返回" @click="goBack">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -412,12 +457,12 @@ watch(spotId, load, { immediate: true })
 
         <div class="hero__caption">
           <div class="hero__id">
-            <img
-              v-if="spot.avatar"
+            <SafeImage
               class="hero__avatar"
               :src="spot.avatar"
+              kind="avatar"
               :alt="`${spot.name} 的头像`"
-              decoding="async"
+              loading="eager"
             />
             <div class="hero__text">
               <div class="nameline">
@@ -544,7 +589,7 @@ watch(spotId, load, { immediate: true })
               :aria-label="`查看第 ${index + 1} 张照片`"
               @click="openPhoto(index)"
             >
-              <img :src="photo.thumb" :alt="spot.name" loading="lazy" decoding="async" />
+              <SafeImage :src="photo.thumb" :alt="spot.name" />
             </button>
           </div>
         </section>
@@ -571,9 +616,14 @@ watch(spotId, load, { immediate: true })
         <section v-if="contacts.length" class="card block">
           <div class="block__title">
             <h2 class="section-title">联系方式</h2>
-            <span class="meta meta--dim">{{ contacts.length }} 项</span>
+            <!-- 查重入口：和编辑页同一个弹窗，冲突里的蓝色用户名可以跳过去看是谁 -->
+            <button class="dupcheck" type="button" :disabled="checkingDup" @click="runContactCheck()">
+              {{ checkingDup ? '检查中…' : '查重' }}
+            </button>
           </div>
-          <p class="meta meta--dim contact-hint">点一条，在底部选「打开」或「复制」</p>
+          <p class="meta meta--dim contact-hint">
+            {{ contacts.length }} 项 · 点一条，在底部选「打开」或「复制」
+          </p>
 
           <div v-for="group in contactGroups" :key="group.type" class="cgroup">
             <div class="cgroup__head">
@@ -636,8 +686,7 @@ watch(spotId, load, { immediate: true })
         <section v-if="spot.children?.length" class="card block">
           <h2 class="section-title">挂靠的人物</h2>
           <RouterLink v-for="child in spot.children" :key="child.id" class="child" :to="`/spot/${child.id}`">
-            <img v-if="child.avatar" class="child__avatar" :src="child.avatar" :alt="child.name" />
-            <span v-else class="child__avatar child__avatar--text">{{ child.name.slice(0, 1) }}</span>
+            <SafeImage class="child__avatar" :src="child.avatar" kind="avatar" :alt="child.name" />
             <span class="child__name">{{ child.name }}</span>
             <RankBar :level="child.rankLevel" />
           </RouterLink>
@@ -664,6 +713,14 @@ watch(spotId, load, { immediate: true })
         :actions="sheetActions"
         @select="onSheetSelect"
         @close="sheetRow = null"
+      />
+
+      <!-- 联系方式查重结果（详情页只有「知道了」，没有「仍然保存」） -->
+      <ContactDuplicateDialog
+        :visible="dupOpen"
+        :duplicates="dupList"
+        mode="check"
+        @close="dupOpen = false"
       />
     </template>
   </div>
@@ -1191,6 +1248,26 @@ watch(spotId, load, { immediate: true })
 }
 
 /* ---- 联系方式（卡内按平台分组） ---- */
+/* 「查重」是卡片标题行上的文字按钮：常驻但低调，别跟每条后面的「›」抢注意力 */
+.dupcheck {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.dupcheck:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* 一组 = 平台小方块 + 平台名，组内每条一行：▪ 值 ……… › */
 .contact-hint {
   margin: 0;
