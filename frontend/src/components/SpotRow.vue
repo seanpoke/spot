@@ -11,15 +11,32 @@ import type { SpotListItem } from '@/api/spots'
  * 打卡点行卡片：地图页抽屉与列表页共用同一份（两边内容必须一致）。
  * 只负责展示，点击交给 RouterLink 进详情。
  */
-const props = defineProps<{
-  spot: SpotListItem
-  /** 距离（km）。没有定位时为 null，副标题就只留状态 */
-  distance?: number | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    spot: SpotListItem
+    /** 距离（km）。没有定位时为 null，副标题就只留状态 */
+    distance?: number | null
+    /**
+     * 副标题里是否带上城市。
+     *
+     * 列表页要（一屏里混着各城市），地图页抽屉不要 —— 抽屉本来就按 city 筛过，
+     * 每行再重复一遍「武汉」纯属噪音。
+     */
+    showCity?: boolean
+  }>(),
+  { distance: null, showCity: false },
+)
 
+/** 副标题统一走「· 」分隔：状态 · 城市 · 距离，缺哪项就跳过哪项，不留空槽 */
 const meta = computed(() => {
-  const status = statusLabel(props.spot.status)
-  return props.distance == null ? status : `${status} · ${formatDistance(props.distance)}`
+  const parts = [statusLabel(props.spot.status)]
+  if (props.showCity && props.spot.city) {
+    parts.push(props.spot.city)
+  }
+  if (props.distance != null) {
+    parts.push(formatDistance(props.distance))
+  }
+  return parts.join(' · ')
 })
 
 /** 没评过分就显示破折号，别显示 0.0 —— 0 分和「没评」是两件事 */
@@ -97,10 +114,13 @@ const ratingText = computed(() => (props.spot.avgRating ? props.spot.avgRating.t
 
 .prow__m span {
   display: block;
+  overflow: hidden;
   margin-top: 3px;
   color: var(--ink3);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .prow__tags {

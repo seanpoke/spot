@@ -25,6 +25,8 @@ import {
   type SpotStatus,
 } from '@/api/spots'
 import { CONTACT_TYPES, contactMeta } from '@/config/contacts'
+import { FALLBACK_PRICE_ITEMS, presetPrice } from '@/config/packages'
+import { listConfigs, type ConfigItem } from '@/api/configs'
 import { listTags, type TagItem } from '@/api/tags'
 import { leaveSpotPage } from '@/router/spotEntry'
 import { resolveTagColor } from '@/utils/tagColor'
@@ -210,6 +212,8 @@ async function load(): Promise<void> {
       listSpots({ kind: 'place' }),
       // 分类只影响分组顺序，失败时用兜底清单，不挡页面
       ensureCategories(),
+      // 价目预设同理：取不到就用内置的三条
+      loadPriceItems(),
     ])
     tags.value = tagList
     // 编辑人物时不能把自己挂到自己名下
@@ -280,8 +284,41 @@ function toggleTag(id: string): void {
   form.tagIds.push(id)
 }
 
-function addPackage(): void {
-  form.packages.push({ name: '', price: '' })
+/** 价目区容器：只在自身范围内找价格框，避免全页 querySelector */
+const pkgSection = ref<HTMLElement | null>(null)
+
+/** 消费项目的内置预设，来自 `base_config` 的 code=priceItem；失败时用兜底清单 */
+const priceItems = ref<ConfigItem[]>([...FALLBACK_PRICE_ITEMS])
+
+/** 拉预设。它只是快捷方式，取不到就继续用兜底的那三条，不挡页面 */
+async function loadPriceItems(): Promise<void> {
+  try {
+    const items = await listConfigs('priceItem')
+    if (items.length > 0) {
+      priceItems.value = items
+    }
+  } catch {
+    // 保持兜底清单：预设不可用不该让整个编辑页报错
+  }
+}
+
+/**
+ * 加一行消费项目。传了预设（1P / 2P / 夜）就把名字填好、配上默认价（如果配了），
+ * 光标直接落到价格框 —— 名字现成，用户唯一还要看/改的就是价格。不传就是空白自定义行。
+ */
+function addPackage(name = '', price = ''): void {
+  const preset = name.trim()
+  form.packages.push({ name: preset, price })
+  if (!preset) return
+  void nextTick(() => {
+    const inputs = pkgSection.value?.querySelectorAll<HTMLInputElement>('input.pkg__input--price')
+    inputs?.[inputs.length - 1]?.focus()
+  })
+}
+
+/** 预设已经加过就不再让点：同一项目加两行没有意义，chip 会置灰 */
+function presetUsed(name: string): boolean {
+  return form.packages.some((row) => row.name.trim() === name)
 }
 
 function removePackage(index: number): void {
@@ -1187,7 +1224,7 @@ onMounted(load)
       <p v-else class="meta block__hint">五类联系方式都加过了，可在各分组里继续加条目。</p>
     </section>
 
-    <section class="card block">
+    <section ref="pkgSection" class="card block">
       <div class="block__title">
         <h2 class="section-title">消费项目</h2>
         <span class="meta">价格填正整数（元），不填就是不写价</span>
@@ -1208,7 +1245,24 @@ onMounted(load)
         <button type="button" class="pkg__del" :aria-label="`删除第 ${index + 1} 项`" @click="removePackage(index)">×</button>
       </div>
 
-      <button type="button" class="btn btn--ghost block__add" @click="addPackage">添加</button>
+      <!-- 常用项目一键加一行：清单来自 base_config 的 code=priceItem，
+           desc 是给人看的说明（一次 / 两次 / 过夜），value 配了默认价就顺手填上。
+           已加过的预设置灰（同一项加两行没意义），删掉那行会自动恢复可点 -->
+      <div class="pkgnames">
+        <button
+          v-for="item in priceItems"
+          :key="item.key"
+          class="pkgchip"
+          :class="{ 'pkgchip--used': presetUsed(item.key) }"
+          type="button"
+          :title="item.desc"
+          :disabled="presetUsed(item.key)"
+          @click="addPackage(item.key, presetPrice(item.value))"
+        >
+          {{ item.key }}
+        </button>
+        <button class="pkgchip pkgchip--add" type="button" @click="addPackage()">＋ 自定义</button>
+      </div>
     </section>
 
     <section class="card block">
@@ -1502,6 +1556,54 @@ onMounted(load)
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* ---- 消费项目的常用预设：一排小胶囊；加过的降成描边灰，读作「已加」而不是按钮 ---- */
+.pkgnames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pkgchip {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.pkgchip:hover:not(:disabled) {
+  background: rgba(17, 19, 24, 0.07);
+  color: var(--ink);
+}
+
+.pkgchip--used {
+  background: transparent;
+  box-shadow: 0 0 0 1px var(--line) inset;
+  color: var(--ink3);
+  /* 再压一档：跟可点的「自定义」在同一排时要一眼分得出谁还能点 */
+  opacity: 0.55;
+  cursor: default;
+}
+
+.pkgchip--add {
+  background: transparent;
+  box-shadow: 0 0 0 1px var(--line) inset;
+  color: var(--ink);
+}
+
+.pkgchip--add:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--ink);
 }
 
 /* ---- 价目一行：项目 + 价格靠左，删除键顶到最右 ---- */

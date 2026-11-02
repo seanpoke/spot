@@ -545,7 +545,8 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <section class="rows">
-        <SpotRow v-for="spot in spots" :key="spot.id" :spot="spot" />
+        <!-- 列表页一屏混着各城市，副标题带上城市；地图抽屉不传，那边按城市筛过了 -->
+        <SpotRow v-for="spot in spots" :key="spot.id" :spot="spot" show-city />
       </section>
 
       <div class="list__more">

@@ -998,12 +998,12 @@ push backend/**  →  GitHub Actions (ubuntu-latest)  →  mvn package  →  镜
 
 | 文件 | 作用 | 什么时候用 |
 |---|---|---|
-| `deploy/docker-compose.dev.yml` | 本地 MySQL 8.0 + Redis 7，首次启动自动执行 `db/schema.sql` | 日常开发 |
+| `deploy/docker-compose.dev.yml`（**已删**） | 原为本地 MySQL 8.0 + Redis 7；现改成直接连云服务器上的共享实例（MySQL `visit_db` + Redis DB 3），本机也没有 docker，不再提供本地容器方案 | — |
 | `deploy/Dockerfile` | **多阶段**：`maven:3.9-eclipse-temurin-21` 编译 → `eclipse-temurin:21-jre-alpine` 运行；非 root，内存参数写死在 `ENV` | CI 构建时 |
 | `deploy/docker-compose.yml` | 线上只有 `spot-api` 一个服务，`image: ghcr.io/seanpoke/spot:latest`，`mem_limit 1g` | 发布后端 |
 | `deploy/.env.example` | 后端环境变量模板，复制成 `.env` 后填值 | 首次部署 |
 | `.github/workflows/docker-publish.yml` | 构建与推送。`push` 到 `main` 且改动 `backend/**` 触发，也可 `workflow_dispatch` 手工重发；打 `latest` + `sha-<短哈希>` + 分支名三个标签；启用 `type=gha` 缓存 | 自动 |
-| `deploy/nginx/visit.conf` | 拷到服务器 `conf.d/`，不参与构建 | 首次接入 |
+| `.nginx/conf.d/visit.conf`（本机维护，已 gitignore，不进仓库） | 服务器 nginx 配置真源：整目录覆盖到 `/home/ubuntu/app/nginx/`，不参与镜像构建 | 首次接入 / 改站点配置 |
 
 `.dockerignore` 的语义随构建位置一起反转：过去是「只把 `backend/target` 里的 jar 送给 daemon」，现在是「**必须放行 `backend/pom.xml` 与 `backend/src`**，否则 `COPY` 那一步就失败」；`designs`（15 MB）、`frontend`、`backend/target` 仍要挡住。
 
@@ -1045,7 +1045,7 @@ volumes:
 
 改完必须 `docker compose up -d`（**不是 `restart`**，volume 变更要重建容器，中断几秒）。
 
-**② 新建 `conf.d/visit.conf`**（完整内容见 `deploy/nginx/visit.conf`）
+**② 新建 `conf.d/visit.conf`**（完整内容以本机 `.nginx/conf.d/visit.conf` 为准，仓库里不再有副本）
 
 | 要点 | 写法 | 为什么 |
 |---|---|---|
@@ -1205,7 +1205,7 @@ tar -czf /backup/uploads_$(date +%F).tar.gz /path/to/uploads
 - 服务器：4 核 / 4 GB 内存 / 40 GB 盘 / 300 GB 月流量 / **3 Mbps 带宽**
 - CDN：`https://images.sean.ltd`，实测为**腾讯云 EdgeOne**（CNAME `eo.dnse4.com`），回源直落 Nginx 静态直出
 - MySQL 8.0（已有）、Redis DB 3（已有）
-- Nginx：五站点共用的公用实例，落在 `/home/ubuntu/app/nginx/`，接入方案见 7.7，配置文件已备在 `deploy/nginx/visit.conf`
+- Nginx：五站点共用的公用实例，落在 `/home/ubuntu/app/nginx/`，接入方案见 7.7，配置文件在本机 `.nginx/conf.d/visit.conf` 维护（已 gitignore，整目录覆盖到服务器）
 
 剩下的都是**上线时要落地的配置清单**，开发期间不用管：EdgeOne 六条见 7.3，Nginx 四步见 7.7（其中 `visit.conf` 已写好，只需加一行挂载 + 补 `images.sean.ltd` 的缓存头）。
 
