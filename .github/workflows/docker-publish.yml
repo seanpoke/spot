@@ -15,13 +15,14 @@
 #   Package settings → Change visibility → Public。若不想公开，见 AGENTS.md
 #   第六节的 docker login ghcr.io 两步。
 #
-# 同时推送到腾讯云 CCR（可选，不配就只推 GHCR）：
+# 可选：同时推到腾讯云 CCR —— 默认不推，要推得手动勾 push_ccr（见下）
 #   Variables：TENCENT_NAMESPACE（必填，控制台「容器镜像服务 → 个人版 → 命名空间」里的名字）
 #              TENCENT_REPOSITORY（可选，默认 spot）
 #   Secrets  ：TENCENT_REGISTRY_USER（登录用户名，即账号 UIN）
-#              TENCENT_REGISTRY_PASSWORD（控制台「个人版 → 访问凭证」里的镜像仓库密码）
-#   一次构建推两处，服务器改 compose 的 image 就能换源 —— 境外 runner 拉 ghcr.io
-#   常常只有几十 KB/s，国内机器从 ccr.ccs.tencentyun.com 拉快得多。
+#              TENCENT_REGISTRY_PASSWORD（控制台「更多 → 重置登录密码」设的镜像仓库密码）
+#   为什么默认不推：runner 在境外，往 ccr 广州传层常常只有几十 KB/s，2026-11-03 实测
+#   12 分钟仍停在 exporting to image，把日常发布从 1 分钟拖成十几分钟。要更新腾讯云镜像
+#   时去 Actions 页面 Run workflow 并勾选 push_ccr，同一次构建推两处，用不到就不付这时间。
 # =============================================================================
 
 name: Docker Publish
@@ -33,6 +34,11 @@ on:
       - 'backend/**'
   # 手工重建入口：改了 Dockerfile / 依赖版本 / 需要重发同一个 commit 时用
   workflow_dispatch:
+    inputs:
+      push_ccr:
+        description: '顺便推送到腾讯云 CCR（跨境上传很慢，可能十几分钟）'
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -48,6 +54,8 @@ concurrency:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # 兜底：正常 3 分钟的路，网络黑洞时不该白占 GitHub 默认的 360 分钟额度
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -75,11 +83,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 腾讯云 CCR（个人版）。境外 runner 拉 ghcr.io 有时只有几十 KB/s，
-      # 服务器改从腾讯云拉会快很多；一次构建推到两处，compose 里换 image 即可切换。
-      # 没配 TENCENT_NAMESPACE 变量时整段跳过，不影响原有的 GHCR 流程。
+      # 腾讯云 CCR（个人版）。境外 runner 往 ccr 广州传层很慢，所以默认不登录不推：
+      # 只有手动 Run workflow 勾选 push_ccr 时才走这里。没配 TENCENT_NAMESPACE 变量
+      # 时同样跳过，不影响原有的 GHCR 流程。
       - name: Log in to Tencent Cloud CCR
-        if: vars.TENCENT_NAMESPACE != ''
+        if: vars.TENCENT_NAMESPACE != '' && inputs.push_ccr == true
         uses: docker/login-action@v3
         with:
           registry: ccr.ccs.tencentyun.com
@@ -105,19 +113,22 @@ jobs:
           GHCR_TAGS: ${{ steps.meta.outputs.tags }}
           NS: ${{ vars.TENCENT_NAMESPACE }}
           REPO: ${{ vars.TENCENT_REPOSITORY }}
+          PUSH_CCR: ${{ inputs.push_ccr }}
         run: |
           TAGS="$(printf '%s' "$GHCR_TAGS" | tr '\n' ',' | sed 's/,$//')"
           # 追加一个 tag，空列表时不留下前导逗号
           append() {
             if [ -z "$TAGS" ]; then TAGS="$1"; else TAGS="$TAGS,$1"; fi
           }
-          if [ -n "$NS" ]; then
+          if [ -z "$NS" ]; then
+            echo "::notice::未配置 TENCENT_NAMESPACE，只推 GHCR"
+          elif [ "$PUSH_CCR" != "true" ]; then
+            echo "::notice::只推 GHCR；要更新腾讯云镜像请 Run workflow 并勾选 push_ccr"
+          else
             if [ -z "$REPO" ]; then REPO=spot; fi
             append "ccr.ccs.tencentyun.com/${NS}/${REPO}:latest"
             append "ccr.ccs.tencentyun.com/${NS}/${REPO}:sha-${GITHUB_SHA::7}"
             echo "同时推送到 ccr.ccs.tencentyun.com/${NS}/${REPO}"
-          else
-            echo "::notice::未配置 TENCENT_NAMESPACE，只推 GHCR"
           fi
           echo "list=${TAGS}" >> "$GITHUB_OUTPUT"
 
