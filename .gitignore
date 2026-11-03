@@ -69,3 +69,13 @@ logs/
 
 # ---------- 服务器 nginx 配置（本机维护的真源，不进仓库）----------
 .nginx/
+
+# ---------- 安卓壳（frontend/android）----------
+# 构建产物 / SDK 路径 / IDE 文件已在 frontend/android/.gitignore 里，
+# 这里只补签名相关：keystore 与口令绝不能进仓库
+*.jks
+*.keystore
+frontend/android/keystore.properties
+# 例外：上面 Java 段的 *.jar 会把 gradle wrapper 一起吞掉，
+# 缺了它 clone 下来 gradlew 直接跑不起来（它不是产物，是启动器的一部分）
+!frontend/android/gradle/wrapper/gradle-wrapper.jar

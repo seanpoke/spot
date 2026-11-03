@@ -22,7 +22,6 @@ deploy/nginx
 
 # deploy 下只有 Dockerfile 需要参与构建，其余是给服务器用的
 deploy/docker-compose.yml
-deploy/docker-compose.dev.yml
 deploy/.env.example
 
 # 文档
