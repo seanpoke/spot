@@ -14,6 +14,14 @@
 #   包默认是 private，首次推送后要去 GitHub → 个人头像 → Packages → 该包 →
 #   Package settings → Change visibility → Public。若不想公开，见 AGENTS.md
 #   第六节的 docker login ghcr.io 两步。
+#
+# 同时推送到腾讯云 CCR（可选，不配就只推 GHCR）：
+#   Variables：TENCENT_NAMESPACE（必填，控制台「容器镜像服务 → 个人版 → 命名空间」里的名字）
+#              TENCENT_REPOSITORY（可选，默认 spot）
+#   Secrets  ：TENCENT_REGISTRY_USER（登录用户名，即账号 UIN）
+#              TENCENT_REGISTRY_PASSWORD（控制台「个人版 → 访问凭证」里的镜像仓库密码）
+#   一次构建推两处，服务器改 compose 的 image 就能换源 —— 境外 runner 拉 ghcr.io
+#   常常只有几十 KB/s，国内机器从 ccr.ccs.tencentyun.com 拉快得多。
 # =============================================================================
 
 name: Docker Publish
@@ -67,6 +75,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 腾讯云 CCR（个人版）。境外 runner 拉 ghcr.io 有时只有几十 KB/s，
+      # 服务器改从腾讯云拉会快很多；一次构建推到两处，compose 里换 image 即可切换。
+      # 没配 TENCENT_NAMESPACE 变量时整段跳过，不影响原有的 GHCR 流程。
+      - name: Log in to Tencent Cloud CCR
+        if: vars.TENCENT_NAMESPACE != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ccr.ccs.tencentyun.com
+          username: ${{ secrets.TENCENT_REGISTRY_USER }}
+          password: ${{ secrets.TENCENT_REGISTRY_PASSWORD }}
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -77,6 +96,31 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=ref,event=branch
 
+      # 把腾讯云的 tag 拼到 GHCR 那批后面，交给同一次 buildx 推送（不重复构建）。
+      # 用 env 传值而不是把 ${{ }} 直接写进 shell 字符串：metadata 的输出是多行，
+      # 直接插进引号里会把换行带进命令，tag 被拆错。
+      - name: Compose image tags
+        id: tags
+        env:
+          GHCR_TAGS: ${{ steps.meta.outputs.tags }}
+          NS: ${{ vars.TENCENT_NAMESPACE }}
+          REPO: ${{ vars.TENCENT_REPOSITORY }}
+        run: |
+          TAGS="$(printf '%s' "$GHCR_TAGS" | tr '\n' ',' | sed 's/,$//')"
+          # 追加一个 tag，空列表时不留下前导逗号
+          append() {
+            if [ -z "$TAGS" ]; then TAGS="$1"; else TAGS="$TAGS,$1"; fi
+          }
+          if [ -n "$NS" ]; then
+            if [ -z "$REPO" ]; then REPO=spot; fi
+            append "ccr.ccs.tencentyun.com/${NS}/${REPO}:latest"
+            append "ccr.ccs.tencentyun.com/${NS}/${REPO}:sha-${GITHUB_SHA::7}"
+            echo "同时推送到 ccr.ccs.tencentyun.com/${NS}/${REPO}"
+          else
+            echo "::notice::未配置 TENCENT_NAMESPACE，只推 GHCR"
+          fi
+          echo "list=${TAGS}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -86,7 +130,7 @@ jobs:
           # 服务器是 x86，明确单平台，别让 buildx 走 QEMU 多平台白白多花几分钟
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.tags.outputs.list }}
           labels: ${{ steps.meta.outputs.labels }}
           # 把构建层缓存存在 GitHub Actions 里，Maven 依赖层跨构建复用
           cache-from: type=gha
