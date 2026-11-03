@@ -107,10 +107,13 @@ app:
 
 logging:
   level:
-    root: info
-    ltd.sean.visit: debug
-    # Mapper 包开 debug 才会打印 SQL 与参数；嫌吵就调成 info
-    ltd.sean.visit.mapper: debug
+    # 默认一律 info：这份配置线上也在用（resources 下只有它一份，没有 -prod 变体），
+    # 写死 debug 的后果是生产每条 SQL 都落盘 —— 日志被 INFO/ERROR 淹没，
+    # 而且 Parameters 里带着联系电话、微信等隐私。本地要调试就在 .env 里覆盖。
+    root: ${LOG_LEVEL_ROOT:info}
+    ltd.sean.visit: ${LOG_LEVEL_APP:info}
+    # 单独一档：debug 时打印每条 SQL 与参数，只在本地查 SQL 时开
+    ltd.sean.visit.mapper: ${LOG_LEVEL_MAPPER:info}
   pattern:
     # 带 traceId 之前先保证时间可读，排查时区问题全靠它
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
