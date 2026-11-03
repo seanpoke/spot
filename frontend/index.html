@@ -5,6 +5,13 @@
     <!-- 移动优先：本项目主要在自己手机上看，窄屏即正式布局 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#F2F4F6" />
+    <!-- 加到主屏幕：manifest + 图标；iOS 另需 apple-mobile-web-app-* 三个 meta 才全屏 -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="打卡" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>打卡地图</title>
   </head>
   <body>

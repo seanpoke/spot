@@ -30,3 +30,15 @@ setUnauthorizedHandler(() => {
 })
 
 createApp(App).use(ElementPlus, { locale: zhCn }).use(router).mount('#app')
+
+/**
+ * 注册 Service Worker（见 public/sw.js）。
+ *
+ * 只在构建产物里注册：dev 下注册会缓存住旧模块，热更新立刻变成"改了没反应"。
+ * 注册失败不报错也不提示 —— 它只负责「加到主屏幕」和断网壳，挂了不影响任何功能。
+ */
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => undefined)
+  })
+}

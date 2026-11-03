@@ -30,30 +30,49 @@ import vue from '@vitejs/plugin-vue'
  */
 const keyPath = fileURLToPath(new URL('./certs/dev-key.pem', import.meta.url))
 const certPath = fileURLToPath(new URL('./certs/dev-cert.pem', import.meta.url))
-const https =
-  existsSync(keyPath) && existsSync(certPath)
-    ? { key: readFileSync(keyPath), cert: readFileSync(certPath) }
-    : undefined
 
-export default defineConfig({
-  plugins: [vue()],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
+export default defineConfig(({ mode }) => {
+  /**
+   * 强制走 http：`npm run dev:http`（内部是 `vite --mode http`）。
+   *
+   * 为什么需要：安卓壳的 `server.url` 是 `http://localhost:5173`，壳里的协议必须和
+   * dev server 一致，否则 WebView 直接加载失败。而手机要用 https 访问 dev server，
+   * 就得把 mkcert 根证书装进手机「用户凭据」，还得指望 WebView 信任用户 CA —— 多两步、
+   * 多一个失败点。
+   *
+   * 好消息是不必折腾：**`http://localhost` 本身就是「安全上下文」**
+   * （页面里 `window.isSecureContext === true`），`navigator.geolocation` 与
+   * Service Worker 都正常。所以本地联调统一用 http，Web 与安卓一个地址通吃。
+   *
+   * 只有「手机用局域网 IP 访问」才真的需要 https —— 那时 origin 不是 localhost，
+   * 定位会被浏览器禁掉。这种情况仍走默认的 `npm run dev`。
+   */
+  const forceHttp = mode === 'http'
+  const https =
+    !forceHttp && existsSync(keyPath) && existsSync(certPath)
+      ? { key: readFileSync(keyPath), cert: readFileSync(certPath) }
+      : undefined
+
+  return {
+    plugins: [vue()],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+      },
     },
-  },
-  server: {
-    host: true,
-    port: 5173,
-    https,
-    proxy: {
-      '/api': { target: 'http://localhost:8811', changeOrigin: true },
-      '/uploads': { target: 'http://localhost:8811', changeOrigin: true },
+    server: {
+      host: true,
+      port: 5173,
+      https,
+      proxy: {
+        '/api': { target: 'http://localhost:8811', changeOrigin: true },
+        '/uploads': { target: 'http://localhost:8811', changeOrigin: true },
+      },
     },
-  },
-  preview: {
-    host: true,
-    port: 4173,
-    https,
-  },
+    preview: {
+      host: true,
+      port: 4173,
+      https,
+    },
+  }
 })

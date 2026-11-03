@@ -5,16 +5,24 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:http": "vite --mode http",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
+    "serve:local": "node scripts/serve-dist.mjs --port 5173 --target http://localhost:8811",
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.3",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/app-launcher": "^6.0.4",
+    "@capacitor/clipboard": "^6.0.3",
+    "@capacitor/core": "^6.2.3",
     "element-plus": "^2.8.8",
     "vue": "^3.5.13",
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.2.3",
     "@types/node": "^22.9.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "typescript": "~5.6.3",
