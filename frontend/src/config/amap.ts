@@ -69,6 +69,8 @@ export interface AmapMap {
   getCenter(): AmapLngLat
   /** 容器像素坐标 → 经纬度，用来「把某个标记挪到面板上方」而不是简单居中 */
   containerToLngLat?(pixel: unknown): AmapLngLat
+  /** 容器尺寸变了要手动通知：高德只在窗口 resize 时自己重算，父级高度从 0 恢复时不会 */
+  resize?(): void
 }
 
 /** 输入提示（AMap.AutoComplete）返回的一条建议 */

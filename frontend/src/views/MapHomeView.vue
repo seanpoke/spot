@@ -86,6 +86,13 @@ const PILLS: readonly { value: 'all' | SpotStatus; label: string }[] = [
 
 const mapEl = ref<HTMLDivElement | null>(null)
 const searchEl = ref<HTMLInputElement | null>(null)
+/**
+ * 地图容器的尺寸观察器。
+ * 老 WebView（荣耀/HONOR 的 Android 14 仍是 Chromium 99）不认 100dvh，`.home` 靠
+ * `height: 100vh` 兜底；首帧布局未落定时高度仍可能是 0，那一轮 bbox 查询会被跳过，
+ * 这里等尺寸真正到位后补一次。
+ */
+let mapResizeObserver: ResizeObserver | null = null
 
 /**
  * 三份数据源：
@@ -646,6 +653,13 @@ async function loadViewport(): Promise<void> {
   if (!map) {
     return
   }
+  // 容器还没尺寸时 getBounds 给出的是「同一个点」，bbox 变成 min == max，后端按
+  // 「视野范围不合法：min 必须小于 max」直接拒掉，用户看到的就是一条红色报错。
+  // 首帧高度为 0 的老 WebView 一定会撞上，等 watchMapSize 补查。
+  const rect = mapEl.value?.getBoundingClientRect()
+  if (!rect || rect.width < 2 || rect.height < 2) {
+    return
+  }
   // 搜索期间标记用全局命中，视野查询没有消费者：先不发，关键字清空时会补一次
   if (query.value) {
     return
@@ -668,6 +682,10 @@ async function loadViewport(): Promise<void> {
   }
   const lngSpan = ne.getLng() - sw.getLng()
   const latSpan = ne.getLat() - sw.getLat()
+  // 跨度为 0 = 视野退化成一个点，发出去也必然 400，省这一次往返
+  if (!(lngSpan > 0) || !(latSpan > 0)) {
+    return
+  }
   const box: SpotBounds = {
     minLng: sw.getLng() - lngSpan * VIEWPORT_PAD,
     maxLng: ne.getLng() + lngSpan * VIEWPORT_PAD,
@@ -702,6 +720,38 @@ async function loadViewport(): Promise<void> {
   }
 }
 
+/**
+ * 容器尺寸从 0 恢复时补一次：通知高德重算画布 + 重查视野。
+ * 不补的话页面会一直停在「城市那批兜底标记」，非得等用户自己拖一下地图。
+ */
+function watchMapSize(): void {
+  const el = mapEl.value
+  if (!el || typeof ResizeObserver !== 'function') {
+    return
+  }
+  mapResizeObserver?.disconnect()
+  let lastWidth = 0
+  let lastHeight = 0
+  mapResizeObserver = new ResizeObserver((entries) => {
+    const box = entries[0]?.contentRect
+    if (!box) {
+      return
+    }
+    if (box.width === lastWidth && box.height === lastHeight) {
+      return
+    }
+    lastWidth = box.width
+    lastHeight = box.height
+    if (box.width < 2 || box.height < 2) {
+      return
+    }
+    // 高德只在窗口 resize 时自己重算画布；父级高度变了得手动喊一声
+    mapRef.value?.resize?.()
+    scheduleViewport()
+  })
+  mapResizeObserver.observe(el)
+}
+
 async function initMap(): Promise<void> {
   if (!mapEl.value) {
     return
@@ -729,6 +779,12 @@ async function initMap(): Promise<void> {
     mapRef.value = map
     // 拖动 / 缩放结束后重查视野（防抖在 scheduleViewport 里）
     map.on('moveend', () => scheduleViewport())
+    // 高德把 bounds 准备好之前那次查询会空手而归（getBounds 还没有西南 / 东北角）。
+    // 有定位时 ensureFit 会顺手触发一次 moveend 遮住这个洞；**没有定位**
+    // （PC 浏览器拒绝授权、或刚进页面就关掉定位提示）时没人再触发，
+    // 表现就是「底图出来了，一个标记都没有」。
+    map.on('complete', () => scheduleViewport())
+    watchMapSize()
     syncMarkers()
     syncMeMarker()
     ensureFit()
@@ -748,6 +804,17 @@ async function initMap(): Promise<void> {
  * 还会把选中态与头像加载状态一起丢掉。这里只做三件事：
  *   内容指纹变了 → 就地换 content；新出现的 → 建；不在了 → 删。
  */
+/**
+ * 标记叠放顺序：选中 200 > 想打卡 120 > 其他 100。
+ * 想打卡的光晕会探出胶囊 4px，被邻居压住就像"发光被切了一刀"，所以让它浮在上面。
+ */
+function markerZIndex(spot: SpotListItem, selected: boolean): number {
+  if (selected) {
+    return 200
+  }
+  return spot.status === 'wishlist' ? 120 : 100
+}
+
 function syncMarkers(): void {
   const map = mapRef.value
   const amap = window.AMap
@@ -777,7 +844,7 @@ function syncMarkers(): void {
         existing.el = el
         existing.sig = sig
       }
-      existing.marker.setzIndex(selected ? 200 : 100)
+      existing.marker.setzIndex(markerZIndex(row.spot, selected))
       overlays.push(existing.marker)
       continue
     }
@@ -787,7 +854,7 @@ function syncMarkers(): void {
       position: [coords.lng, coords.lat],
       content: el,
       anchor: 'center',
-      zIndex: selected ? 200 : 100,
+      zIndex: markerZIndex(row.spot, selected),
     })
     marker.on('click', () => onMarkerClick(row.spot))
     map.add(marker)
@@ -1422,6 +1489,8 @@ onBeforeUnmount(() => {
   window.clearTimeout(listTimer)
   viewAbort?.abort()
   moreObserver?.disconnect()
+  mapResizeObserver?.disconnect()
+  mapResizeObserver = null
   if (geoPermission) {
     geoPermission.onchange = null
     geoPermission = null
@@ -1716,6 +1785,10 @@ onBeforeUnmount(() => {
 /* ---------------- 壳 ---------------- */
 .home {
   position: relative;
+  /* 老 WebView 不认 dvh（Chromium < 108，部分华为/荣耀机型仍是 99）：
+     先给 vh 兜底，否则这条声明整条作废、height 退回 auto，整页高度 0。
+     安卓壳里的症状就是「只有底部 TabBar，地图区一片空白」。 */
+  height: 100vh;
   height: 100dvh;
   max-width: 720px;
   margin: 0 auto;

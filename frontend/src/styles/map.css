@@ -109,6 +109,62 @@
   background: var(--bc);
 }
 
+/* 想打卡：全场唯一「待办」语义，用一层柔光把它从一堆胶囊里托起来。
+ *
+ * 三条实现上的克制：
+ *   1) 光晕画在 `.mk__c::after` 上，动画只改 opacity / transform。直接动 box-shadow
+ *      会让浏览器每帧重算阴影，Chromium 99 的 WebView 上几个点同时呼吸就掉帧。
+ *   2) 颜色写死 rgba(255, 90, 30, …) 而不是 color-mix()：后者 Chromium 99 不支持
+ *      （AGENTS.md 第 36 条）。它与 `--hot` / MARKER_RING.wishlist 同值，改色时两处一起看。
+ *   3) 不新增色相，只是把已有的橙色环向外"散"一圈 —— 状态环仍是唯一的语义来源。
+ */
+.mk--wish .mk__c {
+  border-color: rgba(255, 90, 30, 0.38);
+  box-shadow:
+    0 2px 6px rgba(17, 24, 39, 0.1),
+    0 10px 24px -12px rgba(255, 90, 30, 0.5);
+}
+
+.mk--wish .mk__c::after {
+  content: '';
+  position: absolute;
+  /* 比胶囊大 4px：够看出"发光"，又不会跟相邻标记糊成一片 */
+  inset: -4px;
+  border-radius: 17px;
+  /* 一圈极淡的实边定住轮廓，再往外散一层模糊光 —— 只有模糊会显得脏，只有实边会显得硬 */
+  box-shadow:
+    0 0 0 3px rgba(255, 90, 30, 0.1),
+    0 0 16px 3px rgba(255, 90, 30, 0.34);
+  pointer-events: none;
+  animation: mk-wish-breathe 2.8s ease-in-out infinite;
+}
+
+@keyframes mk-wish-breathe {
+  0%,
+  100% {
+    transform: scale(0.98);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+/* 选中态已经是橙色实描边 + 加重阴影，再呼吸就过曝了：保留静态光晕，停掉动画 */
+.mk--wish.mk--on .mk__c::after {
+  animation: none;
+  opacity: 0.45;
+  transform: none;
+}
+
+/* 系统开了「减少动态效果」就别呼吸，柔光仍然在，识别性不受影响 */
+@media (prefers-reduced-motion: reduce) {
+  .mk--wish .mk__c::after {
+    animation: none;
+  }
+}
+
 /* 避雷：头像去色 + 不显示刻度条（AGENTS.md 第 23 条） */
 .mk--x .mk__av img {
   filter: grayscale(1) brightness(0.98);

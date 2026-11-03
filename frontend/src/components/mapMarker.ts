@@ -23,6 +23,8 @@ export function createSpotMarker(spot: SpotListItem, meta: string, selected: boo
   root.className = 'mk'
   root.classList.toggle('mk--on', selected)
   root.classList.toggle('mk--x', spot.status === 'blacklist')
+  // 想打卡：额外一层呼吸光晕，密集点位里也能一眼捞出来（样式见 styles/map.css）
+  root.classList.toggle('mk--wish', spot.status === 'wishlist')
 
   const card = document.createElement('div')
   card.className = 'mk__c'
