@@ -19,10 +19,27 @@ import {
 import { listVisits, type VisitItem } from '@/api/visits'
 import { HttpError } from '@/api/http'
 import { appScheme, contactMeta, dialNumber, groupContacts } from '@/config/contacts'
+import { copyText, openExternal } from '@/platform'
 import { rankOf } from '@/config/ranks'
 import { leaveSpotPage } from '@/router/spotEntry'
 import { statusMeta } from '@/config/status'
-import { resolveTagColor } from '@/utils/tagColor'
+import { mixHex, resolveTagColor } from '@/utils/tagColor'
+
+/**
+ * 标签 chip 的三档同色（底色 / 描边 / 字色）。
+ *
+ * 颜色在 JS 里混好再用 CSS 变量传下去，不用 `color-mix()`：老 WebView（Chromium 99）
+ * 不认那个函数，整条声明会作废，chip 变成没有底色只有字。
+ */
+function tagChipStyle(tag: { name: string; color?: string | null }): Record<string, string> {
+  const color = resolveTagColor(tag)
+  return {
+    '--tag-color': color,
+    '--tag-bg': mixHex(color, '#ffffff', 0.16),
+    '--tag-line': mixHex(color, '#ffffff', 0.28),
+    '--tag-ink': mixHex(color, '#000000', 0.72),
+  }
+}
 
 /**
  * 打卡点详情。
@@ -266,13 +283,13 @@ async function openContact(row: ContactRow): Promise<void> {
   const meta = contactMeta(row.type)
 
   if (meta.action === 'dial') {
-    window.location.href = `tel:${dialNumber(row.value)}`
+    void openExternal(`tel:${dialNumber(row.value)}`)
     return
   }
 
   // 不 await 复制再跳转：iOS Safari 会把「await 之后」算作失去用户手势，
   // 那样 weixin:// 会被拦。先把协议发出去（仍在手势内），再回来处理复制结果。
-  const copying = navigator.clipboard.writeText(row.value)
+  const copying = copyText(row.value)
 
   const scheme = appScheme(row.type, row.value)
   if (scheme) {
@@ -281,7 +298,7 @@ async function openContact(row: ContactRow): Promise<void> {
       ElMessage.info('微信号已复制，打开微信后粘贴到搜索框')
     }
     // 移动端能直接唤起对应 App；桌面端没有该 App 时浏览器会忽略，不影响复制
-    window.location.href = scheme
+    void openExternal(scheme)
   }
 
   try {
@@ -297,7 +314,7 @@ async function openContact(row: ContactRow): Promise<void> {
 /** 只复制，不拉起 App */
 async function copyContact(row: ContactRow): Promise<void> {
   try {
-    await navigator.clipboard.writeText(row.value)
+    await copyText(row.value)
     ElMessage.success('已复制')
   } catch {
     // 非 HTTPS 或浏览器不给剪贴板权限：只剩「长按选中」这条路
@@ -545,7 +562,7 @@ watch(spotId, load, { immediate: true })
               v-for="tag in spot.tags"
               :key="tag.id"
               class="chip chip--color"
-              :style="{ '--tag-color': resolveTagColor(tag) }"
+              :style="tagChipStyle(tag)"
             >
               <i class="chip__dot" />
               {{ tag.name }}
@@ -1093,9 +1110,10 @@ watch(spotId, load, { immediate: true })
 }
 
 .chip--color {
-  background: color-mix(in srgb, var(--tag-color) 16%, #fff);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tag-color) 28%, #fff) inset;
-  color: color-mix(in srgb, var(--tag-color) 72%, #000);
+  /* 三档颜色由 tagChipStyle() 在 JS 里混好传进来（老 WebView 不认 color-mix） */
+  background: var(--tag-bg);
+  box-shadow: 0 0 0 1px var(--tag-line) inset;
+  color: var(--tag-ink);
 }
 
 .chip__dot {

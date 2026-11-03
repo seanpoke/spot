@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ActionSheet from '@/components/ActionSheet.vue'
 import { contactMeta } from '@/config/contacts'
+import { copyText } from '@/platform'
 import type { ContactDuplicate } from '@/api/spots'
 
 /**
@@ -84,7 +85,7 @@ onBeforeUnmount(() => {
 
 async function copyName(name: string): Promise<void> {
   try {
-    await navigator.clipboard.writeText(name)
+    await copyText(name)
     ElMessage.success(`已复制「${name}」`)
   } catch {
     ElMessage.error('复制失败，请长按文字手动选择')
@@ -208,6 +209,8 @@ async function onSheetSelect(key: string): Promise<void> {
   flex-direction: column;
   width: 100%;
   max-width: 420px;
+  /* vh 兜底：老 WebView 不认 dvh */
+  max-height: 80vh;
   max-height: 80dvh;
   padding: 22px 20px 16px;
   border-radius: 18px;

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { TagBrief } from '@/api/spots'
-import { resolveTagColor } from '@/utils/tagColor'
+import { mixHex, resolveTagColor } from '@/utils/tagColor'
 
 /**
  * 单行标签，按**可用宽度实测**截断，末尾补 `+N`（AGENTS.md 第 19 条 / PRD 5.6）。
@@ -28,8 +28,9 @@ const rest = computed(() => Math.max(0, props.tags.length - visibleCount.value))
 function tagStyle(tag: TagBrief): Record<string, string> {
   const color = resolveTagColor(tag)
   return {
-    background: `color-mix(in srgb, ${color} 16%, #fff)`,
-    color: `color-mix(in srgb, ${color} 72%, #000)`,
+    // 用 mixHex 而不是 CSS color-mix()：老 WebView（Chromium 99）不认后者，会没有底色
+    background: mixHex(color, '#ffffff', 0.16),
+    color: mixHex(color, '#000000', 0.72),
   }
 }
 

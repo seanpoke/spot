@@ -29,7 +29,23 @@ import { FALLBACK_PRICE_ITEMS, presetPrice } from '@/config/packages'
 import { listConfigs, type ConfigItem } from '@/api/configs'
 import { listTags, type TagItem } from '@/api/tags'
 import { leaveSpotPage } from '@/router/spotEntry'
-import { resolveTagColor } from '@/utils/tagColor'
+import { mixHex, resolveTagColor } from '@/utils/tagColor'
+
+/**
+ * 标签选中态的三档同色（底色 / 描边 / 字色）。
+ *
+ * 在 JS 里混好再通过 CSS 变量传下去，不用 `color-mix()`：老 WebView（Chromium 99，
+ * 华为/荣耀机型实测）不认那个函数，整条声明会作废，选中态就没有底色了。
+ */
+function tagPickStyle(tag: { name: string; color?: string | null }): Record<string, string> {
+  const color = resolveTagColor(tag)
+  return {
+    '--tag-color': color,
+    '--tag-bg': mixHex(color, '#ffffff', 0.2),
+    '--tag-line': mixHex(color, '#ffffff', 0.7),
+    '--tag-ink': mixHex(color, '#000000', 0.7),
+  }
+}
 import { groupTagsByCategory } from '@/config/tagCategories'
 import { useTagCategories } from '@/composables/useTagCategories'
 import { uploadImage } from '@/api/upload'
@@ -1083,7 +1099,7 @@ onMounted(load)
                 'tagpick__item--dim':
                   !form.tagIds.includes(tag.id) && form.tagIds.length >= MAX_TAGS,
               }"
-              :style="{ '--tag-color': resolveTagColor(tag) }"
+              :style="tagPickStyle(tag)"
               type="button"
               :aria-pressed="form.tagIds.includes(tag.id)"
               @click="toggleTag(tag.id)"
@@ -1982,9 +1998,10 @@ onMounted(load)
 /* 与详情页标签 chip 同一套颜色语言：浅彩底 + 同色深字。
    描边用 2px：标签名常是 emoji，只靠底色区分太弱，靠一圈实色边才一眼看出勾没勾。 */
 .tagpick__item--on {
-  background: color-mix(in srgb, var(--tag-color) 20%, #fff);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color) 70%, #fff) inset;
-  color: color-mix(in srgb, var(--tag-color) 70%, #000);
+  /* 三档颜色由 tagPickStyle() 在 JS 里混好传进来（老 WebView 不认 color-mix） */
+  background: var(--tag-bg);
+  box-shadow: 0 0 0 2px var(--tag-line) inset;
+  color: var(--tag-ink);
   font-weight: 700;
 }
 

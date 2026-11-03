@@ -200,6 +200,8 @@ async function signOut(): Promise<void> {
   flex-direction: column;
   gap: 14px;
   max-width: 720px;
+  /* vh 兜底：老 WebView 不认 dvh */
+  min-height: 100vh;
   min-height: 100dvh;
   margin: 0 auto;
   /* 底部留白 = TabBar(66) + 安全区 + 18：写死 92px 在有 Home 条的机型上会压住退出按钮 */

@@ -248,6 +248,8 @@ onMounted(() => {
   flex-direction: column;
   gap: 14px;
   max-width: 720px;
+  /* vh 兜底：老 WebView 不认 dvh */
+  min-height: 100vh;
   min-height: 100dvh;
   margin: 0 auto;
   padding: 18px 16px 92px;
