@@ -1,0 +1,106 @@
+# =============================================================================
+# 安卓 APK 构建
+# -----------------------------------------------------------------------------
+# 为什么放云端：服务器只有 4G 且与 MySQL 同机，跑 Gradle 会把数据库挤掉；本机能出包，
+# 但 CI 出包的价值是「同一个 commit，谁装都是同一份 APK」，排查问题时不用先确认
+# 「你本地改过啥」。
+#
+# 产物：Actions → 这次运行 → 底部 Artifacts → visit-apk（app-debug.apk）
+#
+# 壳加载哪里由 frontend/capacitor.config.ts 决定，本文件只负责给它传 CAP_SERVER_URL：
+#   push 到 main        → 不设该变量 → 默认 https://visit.sean.ltd 的远程壳（装上是线上最新版）
+#   workflow_dispatch   → 按输入的 server_url 走；留空 = 打包内置 dist（离线壳，不连服务器）
+#
+# 需要的仓库 Secrets（Settings → Secrets and variables → Actions）：
+#   VITE_AMAP_KEY              必填，否则打出来的 dist 里没有地图 Key
+#   VITE_AMAP_SECURITY_CODE    必填（JS API 2.0 的安全密钥）
+#   VITE_AMAP_STYLE            可选，留空用内置浅色底图
+#
+# 注意：这是 debug 包，用 debug 签名，不要拿去当正式分发渠道；换正式签名再加
+#       keystore（存 Secrets，别进仓库）与 signingConfigs。
+# =============================================================================
+
+name: Android APK
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/apk-build.yml'
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: '壳加载的站点地址；留空 = 打包内置 dist（离线壳）'
+        required: false
+        default: 'https://visit.sean.ltd'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      # Gradle 8.2 + AGP 8.x 必须 JDK 17：本机曾用 JDK 21 踩过（AGENTS 第七节）
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # runner 自带 Android SDK，但 platform 34 不保证齐；显式装一遍最省事
+      - uses: android-actions/setup-android@v3
+      - name: Ensure SDK 34
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null
+
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build web
+        working-directory: frontend
+        env:
+          VITE_AMAP_KEY: ${{ secrets.VITE_AMAP_KEY }}
+          VITE_AMAP_SECURITY_CODE: ${{ secrets.VITE_AMAP_SECURITY_CODE }}
+          VITE_AMAP_STYLE: ${{ secrets.VITE_AMAP_STYLE }}
+        run: npm run build
+
+      - name: Sync Capacitor
+        working-directory: frontend
+        env:
+          INPUT_SERVER_URL: ${{ inputs.server_url }}
+        run: |
+          # 手工触发时按输入走（留空 = 内置 dist）；push 时不设这个变量 = 默认线上
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            export CAP_SERVER_URL="$INPUT_SERVER_URL"
+          fi
+          npx cap sync android
+
+      # Gradle 缓存：首次约 3 分钟，之后 1 分钟出头
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('frontend/android/**/*.gradle*', 'frontend/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build APK
+        working-directory: frontend/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --console=plain
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: visit-apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+          if-no-files-found: error
